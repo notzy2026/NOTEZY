@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Upload, BookOpen, FileText, GraduationCap, IndianRupee, Shield, FileCheck, Truck, Mail, Search, Menu, X, Sun, Moon } from 'lucide-react';
 import { Button } from './ui/button';
 import { useTheme } from '../contexts/ThemeContext';
@@ -428,8 +429,26 @@ export function LandingPage({ onNavigateToLogin, onNavigateToSignup }: LandingPa
             </div>
           </div>
 
-          <div className="mt-8 pt-8 border-t border-gray-200 dark:border-slate-800 text-center text-sm text-gray-500 dark:text-slate-500">
-            <p>&copy; 2025 Notezy. All rights reserved. Built for students, by students.</p>
+          {/* Policy Links */}
+          <div className="mt-8 pt-8 border-t border-gray-200 dark:border-slate-800">
+            <div className="flex flex-wrap justify-center gap-4 md:gap-6 text-sm text-gray-600 dark:text-slate-400 mb-6">
+              <Link to="/terms" className="hover:text-gray-900 dark:hover:text-white transition-colors">
+                Terms & Conditions
+              </Link>
+              <Link to="/privacy" className="hover:text-gray-900 dark:hover:text-white transition-colors">
+                Privacy Policy
+              </Link>
+              <Link to="/refund" className="hover:text-gray-900 dark:hover:text-white transition-colors">
+                Refund & Cancellation
+              </Link>
+              <Link to="/shipping" className="hover:text-gray-900 dark:hover:text-white transition-colors">
+                Shipping & Delivery
+              </Link>
+              <Link to="/contact" className="hover:text-gray-900 dark:hover:text-white transition-colors">
+                Contact Us
+              </Link>
+            </div>
+            <p className="text-center text-sm text-gray-500 dark:text-slate-500">&copy; 2025 Notezy. All rights reserved. Built for students, by students.</p>
           </div>
         </div>
       </footer>

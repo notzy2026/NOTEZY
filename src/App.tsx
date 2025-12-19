@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Routes, Route } from 'react-router-dom';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Navigation } from './components/Navigation';
@@ -26,6 +27,13 @@ import { AdminEarningsPage } from './components/AdminEarningsPage';
 import { AdminNotesPage } from './components/AdminNotesPage';
 import { AdminChatPage } from './components/AdminChatPage';
 import { AdminUsersPage } from './components/AdminUsersPage';
+import {
+  PublicTermsPage,
+  PublicPrivacyPage,
+  PublicRefundPage,
+  PublicShippingPage,
+  ContactUsPage
+} from './components/pages';
 import { Note, UserProfile } from './types';
 import {
   getNotes,
@@ -388,7 +396,17 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <AppContent />
+        <Routes>
+          {/* Public policy pages - accessible without login */}
+          <Route path="/terms" element={<PublicTermsPage />} />
+          <Route path="/privacy" element={<PublicPrivacyPage />} />
+          <Route path="/refund" element={<PublicRefundPage />} />
+          <Route path="/shipping" element={<PublicShippingPage />} />
+          <Route path="/contact" element={<ContactUsPage />} />
+
+          {/* Main app route */}
+          <Route path="/*" element={<AppContent />} />
+        </Routes>
       </AuthProvider>
     </ThemeProvider>
   );
