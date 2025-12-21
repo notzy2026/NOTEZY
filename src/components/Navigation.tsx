@@ -27,7 +27,7 @@ export function Navigation({ currentPage, onNavigate, onLoginRequest }: Navigati
     { id: 'my-requests', label: 'My Requests', icon: FileQuestion },
     { id: 'earnings', label: 'Earnings', icon: IndianRupee },
     { id: 'profile', label: 'My Profile', icon: User },
-    { id: 'upload', label: 'Upload Notes', icon: Upload },
+    { id: 'upload', label: 'Upload', icon: Upload },
     { id: 'support', label: 'Support', icon: MessageSquare },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
