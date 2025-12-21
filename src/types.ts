@@ -16,6 +16,7 @@ export interface Note {
   uploaderName: string;
   uploadDate: string;
   isTopSelling?: boolean;
+  isVerified?: boolean;
 }
 
 export interface Review {
@@ -33,11 +34,27 @@ export interface UserProfile {
   name: string;
   email: string;
   avatarUrl: string;
+  bio?: string;
   totalEarnings: number;
   uploadedNotes: Note[];
   isAdmin?: boolean;
   isVerified?: boolean;
   isBlocked?: boolean;
+  pendingPayout?: boolean;
+}
+
+export interface PayoutRequest {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  upiId: string;
+  grossAmount: number;
+  platformFee: number;
+  netAmount: number;
+  status: 'pending' | 'completed';
+  requestedAt: string;
+  completedAt?: string;
 }
 
 export interface ChatMessage {
@@ -58,4 +75,19 @@ export interface SupportChat {
   createdAt: string;
   lastMessage: string;
   lastMessageAt: string;
+}
+
+export interface NoteRequest {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  title: string;
+  description: string;
+  category: NoteCategory;
+  status: 'pending' | 'responded' | 'closed';
+  createdAt: string;
+  response?: string;
+  responseLink?: string;
+  respondedAt?: string;
 }

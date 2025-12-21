@@ -27,6 +27,10 @@ import { AdminEarningsPage } from './components/AdminEarningsPage';
 import { AdminNotesPage } from './components/AdminNotesPage';
 import { AdminChatPage } from './components/AdminChatPage';
 import { AdminUsersPage } from './components/AdminUsersPage';
+import { AdminPayoutsPage } from './components/AdminPayoutsPage';
+import { AdminRequestsPage } from './components/AdminRequestsPage';
+import { MyRequestsPage } from './components/MyRequestsPage';
+import { LoginPromptModal } from './components/LoginPromptModal';
 import {
   PublicTermsPage,
   PublicPrivacyPage,
@@ -41,19 +45,22 @@ import {
   getUserBookmarks,
   getUserBookmarkIds,
   getUserPurchaseIds,
-  addPurchase,
   addBookmark,
   removeBookmark,
   getNoteById,
 } from './lib/firestore';
+import { useRazorpay } from './hooks/useRazorpay';
 
 function AppContent() {
-  const { isAuthenticated, isLoading, user, userProfile, logout } = useAuth();
+  const { isAuthenticated, isLoading, user, userProfile, logout, isGuest, exitGuestMode } = useAuth();
+  const { initiatePayment, loading: paymentLoading } = useRazorpay();
   const [authPage, setAuthPage] = useState<'landing' | 'login' | 'signup'>('landing');
   const [currentPage, setCurrentPage] = useState('home');
   const [searchQuery, setSearchQuery] = useState('');
   const [previewNote, setPreviewNote] = useState<Note | null>(null);
   const [viewerNote, setViewerNote] = useState<Note | null>(null);
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+  const [loginPromptMessage, setLoginPromptMessage] = useState('');
 
   // Redirect admin users to admin page by default
   useEffect(() => {
@@ -131,8 +138,8 @@ function AppContent() {
     );
   }
 
-  // Show login/signup if not authenticated
-  if (!isAuthenticated) {
+  // Show login/signup if not authenticated and not guest
+  if (!isAuthenticated && !isGuest) {
     if (authPage === 'login') {
       return (
         <LoginPage
@@ -157,25 +164,55 @@ function AppContent() {
     }
   }
 
+  // Helper to prompt login for guests
+  const requireAuth = (message: string): boolean => {
+    if (isGuest) {
+      setLoginPromptMessage(message);
+      setShowLoginPrompt(true);
+      return false;
+    }
+    return true;
+  };
+
+  const handleGuestLoginRedirect = () => {
+    setShowLoginPrompt(false);
+    exitGuestMode();
+    setAuthPage('login');
+  };
+
+  const handleGuestSignupRedirect = () => {
+    setShowLoginPrompt(false);
+    exitGuestMode();
+    setAuthPage('signup');
+  };
+
   const handlePurchase = async (noteId: string) => {
+    if (!requireAuth('Please login to purchase notes.')) return;
     if (!user) return;
 
     const note = notes.find(n => n.id === noteId);
     if (note && !purchasedIds.includes(noteId)) {
       try {
-        await addPurchase(user.uid, noteId);
-        setPurchasedNotes([...purchasedNotes, note]);
-        setPurchasedIds([...purchasedIds, noteId]);
-        // In production, integrate payment processing here
-        alert(`Successfully purchased "${note.title}" for $${note.price}`);
+        // Initiate Razorpay payment
+        const result = await initiatePayment(noteId, note.price, note.title);
+
+        if (result.success) {
+          // Payment successful - Cloud Function already recorded purchase
+          setPurchasedNotes([...purchasedNotes, note]);
+          setPurchasedIds([...purchasedIds, noteId]);
+          alert(`Successfully purchased "${note.title}"!`);
+        } else if (result.error && result.error !== 'Payment cancelled') {
+          alert(`Payment failed: ${result.error}`);
+        }
       } catch (error) {
         console.error('Error purchasing note:', error);
-        alert('Failed to purchase note. Please try again.');
+        alert('Failed to initiate payment. Please try again.');
       }
     }
   };
 
   const handleBookmark = async (noteId: string) => {
+    if (!requireAuth('Please login to bookmark notes.')) return;
     if (!user) return;
 
     const note = notes.find(n => n.id === noteId);
@@ -198,6 +235,7 @@ function AppContent() {
   };
 
   const handleViewNotes = async (noteId: string) => {
+    if (!requireAuth('Please login to view full notes.')) return;
     const note = [...purchasedNotes, ...notes].find(n => n.id === noteId);
     if (note) {
       setViewerNote(note);
@@ -263,7 +301,11 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-slate-950">
-      <Navigation currentPage={currentPage} onNavigate={setCurrentPage} />
+      <Navigation
+        currentPage={currentPage}
+        onNavigate={setCurrentPage}
+        onLoginRequest={handleGuestLoginRedirect}
+      />
 
       {/* Only show TopBar on desktop, hide on mobile */}
       <div className="hidden lg:block">
@@ -375,6 +417,18 @@ function AppContent() {
         <AdminUsersPage />
       )}
 
+      {currentPage === 'admin-payouts' && (
+        <AdminPayoutsPage onBack={() => setCurrentPage('admin')} />
+      )}
+
+      {currentPage === 'admin-requests' && (
+        <AdminRequestsPage onBack={() => setCurrentPage('admin')} />
+      )}
+
+      {currentPage === 'my-requests' && (
+        <MyRequestsPage />
+      )}
+
       {previewNote && (
         <NotePreviewModal
           note={previewNote}
@@ -388,6 +442,15 @@ function AppContent() {
           onClose={() => setViewerNote(null)}
         />
       )}
+
+      {/* Login Prompt Modal for Guests */}
+      <LoginPromptModal
+        isOpen={showLoginPrompt}
+        onClose={() => setShowLoginPrompt(false)}
+        onLogin={handleGuestLoginRedirect}
+        onSignup={handleGuestSignupRedirect}
+        message={loginPromptMessage}
+      />
     </div>
   );
 }

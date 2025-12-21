@@ -1,4 +1,4 @@
-import { User, Edit, Mail, Calendar, Camera } from 'lucide-react';
+import { User, Edit, Mail, Calendar, Camera, FileText } from 'lucide-react';
 import { UserProfile, Note } from '../types';
 import { NoteCard } from './NoteCard';
 import { useState, useRef } from 'react';
@@ -16,6 +16,7 @@ export function ProfilePage({ user, onPreview }: ProfilePageProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedName, setEditedName] = useState(user.name);
   const [editedEmail, setEditedEmail] = useState(user.email);
+  const [editedBio, setEditedBio] = useState(user.bio || '');
   const [avatarUrl, setAvatarUrl] = useState(user.avatarUrl);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -27,6 +28,7 @@ export function ProfilePage({ user, onPreview }: ProfilePageProps) {
       await updateUserProfile(authUser.uid, {
         name: editedName,
         avatarUrl: avatarUrl,
+        bio: editedBio,
       });
       if (refreshUserProfile) {
         await refreshUserProfile();
@@ -129,6 +131,18 @@ export function ProfilePage({ user, onPreview }: ProfilePageProps) {
                     />
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Email cannot be changed</p>
                   </div>
+                  <div>
+                    <label className="block text-gray-700 dark:text-gray-300 mb-1 text-sm">Bio</label>
+                    <textarea
+                      value={editedBio}
+                      onChange={(e) => setEditedBio(e.target.value)}
+                      placeholder="Tell us about yourself..."
+                      rows={3}
+                      maxLength={200}
+                      className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white resize-none"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{editedBio.length}/200 characters</p>
+                  </div>
                   <div className="flex gap-2">
                     <button
                       onClick={handleSave}
@@ -141,6 +155,7 @@ export function ProfilePage({ user, onPreview }: ProfilePageProps) {
                         setIsEditing(false);
                         setEditedName(user.name);
                         setEditedEmail(user.email);
+                        setEditedBio(user.bio || '');
                         setAvatarUrl(user.avatarUrl);
                       }}
                       className="px-6 py-2.5 bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors"
@@ -151,7 +166,10 @@ export function ProfilePage({ user, onPreview }: ProfilePageProps) {
                 </div>
               ) : (
                 <>
-                  <h1 className="text-gray-900 dark:text-white mb-3">{user.name}</h1>
+                  <h1 className="text-gray-900 dark:text-white mb-2">{user.name}</h1>
+                  {user.bio && (
+                    <p className="text-gray-600 dark:text-gray-400 mb-3 italic">"{user.bio}"</p>
+                  )}
                   <div className="flex flex-col gap-2 text-gray-600 dark:text-gray-400 mb-4">
                     <div className="flex items-center gap-2">
                       <Mail className="w-4 h-4" />

@@ -14,11 +14,14 @@ interface AuthContextType {
   user: FirebaseUser | null;
   userProfile: UserProfile | null;
   isAuthenticated: boolean;
+  isGuest: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signup: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   refreshUserProfile: () => Promise<void>;
+  enterGuestMode: () => void;
+  exitGuestMode: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,6 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isGuest, setIsGuest] = useState(false);
 
   // Listen to auth state changes
   useEffect(() => {
@@ -34,6 +38,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(firebaseUser);
 
       if (firebaseUser) {
+        // User logged in - exit guest mode
+        setIsGuest(false);
         // Fetch user profile from Firestore
         const profile = await getUserProfile(firebaseUser.uid);
         setUserProfile(profile);
@@ -54,9 +60,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const enterGuestMode = () => {
+    setIsGuest(true);
+  };
+
+  const exitGuestMode = () => {
+    setIsGuest(false);
+  };
+
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
       await signInWithEmailAndPassword(auth, email, password);
+      setIsGuest(false);
       return { success: true };
     } catch (error: any) {
       let errorMessage = 'Failed to sign in';
@@ -86,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Fetch the newly created profile
       const profile = await getUserProfile(userCredential.user.uid);
       setUserProfile(profile);
+      setIsGuest(false);
 
       return { success: true };
     } catch (error: any) {
@@ -105,6 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signOut(auth);
     setUser(null);
     setUserProfile(null);
+    setIsGuest(false);
   };
 
   return (
@@ -113,11 +130,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         userProfile,
         isAuthenticated: !!user,
+        isGuest,
         isLoading,
         login,
         signup,
         logout,
         refreshUserProfile,
+        enterGuestMode,
+        exitGuestMode,
       }}
     >
       {children}
@@ -132,3 +152,4 @@ export function useAuth() {
   }
   return context;
 }
+

@@ -14,7 +14,7 @@ import {
     increment,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Note, UserProfile, NoteCategory, SupportChat, ChatMessage, Review } from '../types';
+import { Note, UserProfile, NoteCategory, SupportChat, ChatMessage, Review, PayoutRequest, NoteRequest } from '../types';
 
 // Collection references
 const usersCollection = collection(db, 'users');
@@ -22,6 +22,9 @@ const notesCollection = collection(db, 'notes');
 const purchasesCollection = collection(db, 'purchases');
 const bookmarksCollection = collection(db, 'bookmarks');
 const reviewsCollection = collection(db, 'reviews');
+const payoutsCollection = collection(db, 'payouts');
+const noteRequestsCollection = collection(db, 'noteRequests');
+const settingsDoc = doc(db, 'settings', 'platform');
 
 // ============ USER FUNCTIONS ============
 
@@ -50,6 +53,7 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
         name: data.name,
         email: data.email,
         avatarUrl: data.avatarUrl || '',
+        bio: data.bio || '',
         totalEarnings: data.totalEarnings || 0,
         uploadedNotes,
         isAdmin: data.isAdmin || false,
@@ -60,7 +64,7 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
 
 export async function updateUserProfile(
     uid: string,
-    data: Partial<{ name: string; email: string; avatarUrl: string }>
+    data: Partial<{ name: string; email: string; avatarUrl: string; bio: string }>
 ): Promise<void> {
     await updateDoc(doc(usersCollection, uid), data);
 }
@@ -425,6 +429,14 @@ export async function setNoteTopSelling(noteId: string, isTopSelling: boolean): 
     await updateDoc(doc(notesCollection, noteId), { isTopSelling });
 }
 
+export async function setNoteVerified(noteId: string, isVerified: boolean): Promise<void> {
+    await updateDoc(doc(notesCollection, noteId), { isVerified });
+}
+
+export async function deleteNote(noteId: string): Promise<void> {
+    await deleteDoc(doc(notesCollection, noteId));
+}
+
 // ============ SUPPORT CHAT FUNCTIONS ============
 
 export async function createSupportChat(userId: string, userName: string, userEmail: string, initialMessage: string): Promise<string> {
@@ -539,4 +551,246 @@ export async function getAllChats(): Promise<SupportChat[]> {
 
 export async function updateChatStatus(chatId: string, status: 'open' | 'closed'): Promise<void> {
     await updateDoc(doc(supportChatsCollection, chatId), { status });
+}
+
+// ============ PAYOUT FUNCTIONS ============
+
+export async function getPlatformFee(): Promise<number> {
+    const docSnap = await getDoc(settingsDoc);
+    if (!docSnap.exists()) {
+        // Default 30% fee
+        await setDoc(settingsDoc, { platformFee: 30 });
+        return 30;
+    }
+    return docSnap.data().platformFee || 30;
+}
+
+export async function updatePlatformFee(fee: number): Promise<void> {
+    await setDoc(settingsDoc, { platformFee: fee }, { merge: true });
+}
+
+export async function createPayoutRequest(
+    userId: string,
+    userName: string,
+    userEmail: string,
+    upiId: string,
+    grossAmount: number
+): Promise<string> {
+    const platformFee = await getPlatformFee();
+    const netAmount = grossAmount * (1 - platformFee / 100);
+
+    const docRef = await addDoc(payoutsCollection, {
+        userId,
+        userName,
+        userEmail,
+        upiId,
+        grossAmount,
+        platformFee,
+        netAmount,
+        status: 'pending',
+        requestedAt: Timestamp.now(),
+    });
+
+    // Mark user as having pending payout
+    await updateDoc(doc(usersCollection, userId), {
+        pendingPayout: true,
+    });
+
+    return docRef.id;
+}
+
+export async function getPendingPayouts(): Promise<PayoutRequest[]> {
+    const q = query(payoutsCollection, where('status', '==', 'pending'), orderBy('requestedAt', 'desc'));
+    const querySnapshot = await getDocs(q);
+
+    return querySnapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+            id: docSnap.id,
+            userId: data.userId,
+            userName: data.userName,
+            userEmail: data.userEmail,
+            upiId: data.upiId,
+            grossAmount: data.grossAmount,
+            platformFee: data.platformFee,
+            netAmount: data.netAmount,
+            status: data.status,
+            requestedAt: data.requestedAt instanceof Timestamp
+                ? data.requestedAt.toDate().toISOString()
+                : data.requestedAt,
+        };
+    });
+}
+
+export async function getAllPayouts(): Promise<PayoutRequest[]> {
+    const q = query(payoutsCollection, orderBy('requestedAt', 'desc'));
+    const querySnapshot = await getDocs(q);
+
+    return querySnapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+            id: docSnap.id,
+            userId: data.userId,
+            userName: data.userName,
+            userEmail: data.userEmail,
+            upiId: data.upiId,
+            grossAmount: data.grossAmount,
+            platformFee: data.platformFee,
+            netAmount: data.netAmount,
+            status: data.status,
+            requestedAt: data.requestedAt instanceof Timestamp
+                ? data.requestedAt.toDate().toISOString()
+                : data.requestedAt,
+            completedAt: data.completedAt instanceof Timestamp
+                ? data.completedAt.toDate().toISOString()
+                : data.completedAt,
+        };
+    });
+}
+
+export async function markPayoutComplete(requestId: string): Promise<void> {
+    // Get the payout request
+    const payoutDoc = await getDoc(doc(payoutsCollection, requestId));
+    if (!payoutDoc.exists()) {
+        throw new Error('Payout request not found');
+    }
+
+    const payoutData = payoutDoc.data();
+    const userId = payoutData.userId;
+
+    // Update payout status
+    await updateDoc(doc(payoutsCollection, requestId), {
+        status: 'completed',
+        completedAt: Timestamp.now(),
+    });
+
+    // Reset user earnings to 0 and clear pending flag
+    await updateDoc(doc(usersCollection, userId), {
+        totalEarnings: 0,
+        pendingPayout: false,
+    });
+}
+
+export async function getUserPayoutStatus(userId: string): Promise<PayoutRequest | null> {
+    const q = query(
+        payoutsCollection,
+        where('userId', '==', userId),
+        where('status', '==', 'pending')
+    );
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot.empty) return null;
+
+    const docSnap = querySnapshot.docs[0];
+    const data = docSnap.data();
+    return {
+        id: docSnap.id,
+        userId: data.userId,
+        userName: data.userName,
+        userEmail: data.userEmail,
+        upiId: data.upiId,
+        grossAmount: data.grossAmount,
+        platformFee: data.platformFee,
+        netAmount: data.netAmount,
+        status: data.status,
+        requestedAt: data.requestedAt instanceof Timestamp
+            ? data.requestedAt.toDate().toISOString()
+            : data.requestedAt,
+    };
+}
+
+// ============ NOTE REQUEST FUNCTIONS ============
+
+export async function createNoteRequest(
+    userId: string,
+    userName: string,
+    userEmail: string,
+    title: string,
+    description: string,
+    category: NoteCategory
+): Promise<string> {
+    const docRef = await addDoc(noteRequestsCollection, {
+        userId,
+        userName,
+        userEmail,
+        title,
+        description,
+        category,
+        status: 'pending',
+        createdAt: Timestamp.now(),
+    });
+    return docRef.id;
+}
+
+export async function getUserNoteRequests(userId: string): Promise<NoteRequest[]> {
+    const q = query(noteRequestsCollection, where('userId', '==', userId), orderBy('createdAt', 'desc'));
+    const querySnapshot = await getDocs(q);
+
+    return querySnapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+            id: docSnap.id,
+            userId: data.userId,
+            userName: data.userName,
+            userEmail: data.userEmail,
+            title: data.title,
+            description: data.description,
+            category: data.category,
+            status: data.status,
+            createdAt: data.createdAt instanceof Timestamp
+                ? data.createdAt.toDate().toISOString()
+                : data.createdAt,
+            response: data.response,
+            responseLink: data.responseLink,
+            respondedAt: data.respondedAt instanceof Timestamp
+                ? data.respondedAt.toDate().toISOString()
+                : data.respondedAt,
+        };
+    });
+}
+
+export async function getAllNoteRequests(): Promise<NoteRequest[]> {
+    const q = query(noteRequestsCollection, orderBy('createdAt', 'desc'));
+    const querySnapshot = await getDocs(q);
+
+    return querySnapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+            id: docSnap.id,
+            userId: data.userId,
+            userName: data.userName,
+            userEmail: data.userEmail,
+            title: data.title,
+            description: data.description,
+            category: data.category,
+            status: data.status,
+            createdAt: data.createdAt instanceof Timestamp
+                ? data.createdAt.toDate().toISOString()
+                : data.createdAt,
+            response: data.response,
+            responseLink: data.responseLink,
+            respondedAt: data.respondedAt instanceof Timestamp
+                ? data.respondedAt.toDate().toISOString()
+                : data.respondedAt,
+        };
+    });
+}
+
+export async function respondToNoteRequest(
+    requestId: string,
+    response: string,
+    responseLink?: string
+): Promise<void> {
+    await updateDoc(doc(noteRequestsCollection, requestId), {
+        status: 'responded',
+        response,
+        responseLink: responseLink || null,
+        respondedAt: Timestamp.now(),
+    });
+}
+
+export async function closeNoteRequest(requestId: string): Promise<void> {
+    await updateDoc(doc(noteRequestsCollection, requestId), {
+        status: 'closed',
+    });
 }

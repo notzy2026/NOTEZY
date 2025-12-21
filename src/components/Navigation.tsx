@@ -1,4 +1,4 @@
-import { Home, Download, Bookmark, IndianRupee, User, Upload, Menu, X, Moon, Sun, Settings, MessageSquare, Shield, Users, FileText, LogOut } from 'lucide-react';
+import { Home, Download, Bookmark, IndianRupee, User, Upload, Menu, X, Moon, Sun, Settings, MessageSquare, Shield, Users, FileText, LogOut, Wallet, FileQuestion, LogIn } from 'lucide-react';
 import { useState } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -6,20 +6,25 @@ import { useAuth } from '../contexts/AuthContext';
 interface NavigationProps {
   currentPage: string;
   onNavigate: (page: string) => void;
+  onLoginRequest?: () => void;
 }
 
-export function Navigation({ currentPage, onNavigate }: NavigationProps) {
+export function Navigation({ currentPage, onNavigate, onLoginRequest }: NavigationProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { isDark, toggleTheme } = useTheme();
-  const { userProfile, logout } = useAuth();
+  const { userProfile, logout, isGuest, exitGuestMode } = useAuth();
 
   const isAdmin = userProfile?.isAdmin || false;
 
+  // Protected items that guests cannot access
+  const protectedIds = ['downloads', 'bookmarks', 'my-requests', 'earnings', 'profile', 'upload', 'support', 'settings'];
+
   // Regular user menu items
-  const userMenuItems = [
+  const allUserMenuItems = [
     { id: 'home', label: 'Home', icon: Home },
     { id: 'downloads', label: 'Downloads', icon: Download },
     { id: 'bookmarks', label: 'Bookmarks', icon: Bookmark },
+    { id: 'my-requests', label: 'My Requests', icon: FileQuestion },
     { id: 'earnings', label: 'Earnings', icon: IndianRupee },
     { id: 'profile', label: 'My Profile', icon: User },
     { id: 'upload', label: 'Upload Notes', icon: Upload },
@@ -27,42 +32,60 @@ export function Navigation({ currentPage, onNavigate }: NavigationProps) {
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
+  // Filter out protected items for guests
+  const userMenuItems = isGuest
+    ? allUserMenuItems.filter(item => !protectedIds.includes(item.id))
+    : allUserMenuItems;
+
   // Admin-only menu items
   const adminMenuItems = [
     { id: 'admin', label: 'Dashboard', icon: Shield },
     { id: 'admin-users', label: 'Manage Users', icon: Users },
+    { id: 'admin-payouts', label: 'Payouts', icon: Wallet },
+    { id: 'admin-requests', label: 'Note Requests', icon: FileQuestion },
     { id: 'admin-earnings', label: 'User Earnings', icon: IndianRupee },
     { id: 'admin-notes', label: 'Manage Notes', icon: FileText },
     { id: 'admin-chats', label: 'Support Chats', icon: MessageSquare },
   ];
 
-  // Which menu items to show based on user type
-  const menuItems = isAdmin ? adminMenuItems : userMenuItems;
+  // Which menu items to show based on user type (guests can't be admin)
+  const menuItems = (isAdmin && !isGuest) ? adminMenuItems : userMenuItems;
 
-  // Mobile bottom navbar items - different for admin
-  const mobileBottomItems = isAdmin
+  // Mobile bottom navbar items - different for admin and guests
+  const mobileBottomItems = (isAdmin && !isGuest)
     ? [
       { id: 'admin', label: 'Dashboard', icon: Shield },
       { id: 'admin-users', label: 'Users', icon: Users },
       { id: 'admin-notes', label: 'Notes', icon: FileText },
       { id: 'admin-chats', label: 'Chats', icon: MessageSquare },
     ]
-    : [
-      { id: 'home', label: 'Home', icon: Home },
-      { id: 'downloads', label: 'Downloads', icon: Download },
-      { id: 'upload', label: 'Upload', icon: Upload },
-      { id: 'earnings', label: 'Earnings', icon: IndianRupee },
-      { id: 'profile', label: 'Profile', icon: User },
-    ];
+    : isGuest
+      ? [
+        { id: 'home', label: 'Home', icon: Home },
+      ]
+      : [
+        { id: 'home', label: 'Home', icon: Home },
+        { id: 'downloads', label: 'Downloads', icon: Download },
+        { id: 'upload', label: 'Upload', icon: Upload },
+        { id: 'earnings', label: 'Earnings', icon: IndianRupee },
+        { id: 'profile', label: 'Profile', icon: User },
+      ];
 
   // Mobile hamburger menu items (not in bottom navbar)
-  const mobileMenuItems = isAdmin
-    ? [] // Admin has all items in bottom navbar
-    : [
-      { id: 'bookmarks', label: 'Bookmarks', icon: Bookmark },
-      { id: 'support', label: 'Support', icon: MessageSquare },
-      { id: 'settings', label: 'Settings', icon: Settings },
-    ];
+  const mobileMenuItems = (isAdmin && !isGuest)
+    ? [
+      { id: 'admin-payouts', label: 'Payouts', icon: Wallet },
+      { id: 'admin-requests', label: 'Note Requests', icon: FileQuestion },
+      { id: 'admin-earnings', label: 'User Earnings', icon: IndianRupee },
+    ]
+    : isGuest
+      ? [] // Guests don't have hamburger menu items
+      : [
+        { id: 'my-requests', label: 'My Requests', icon: FileQuestion },
+        { id: 'bookmarks', label: 'Bookmarks', icon: Bookmark },
+        { id: 'support', label: 'Support', icon: MessageSquare },
+        { id: 'settings', label: 'Settings', icon: Settings },
+      ];
 
   const handleLogout = () => {
     logout();
@@ -127,7 +150,15 @@ export function Navigation({ currentPage, onNavigate }: NavigationProps) {
               </>
             )}
           </button>
-          {isAdmin && (
+          {isGuest ? (
+            <button
+              onClick={onLoginRequest}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+            >
+              <LogIn className="w-5 h-5" />
+              <span>Login / Sign Up</span>
+            </button>
+          ) : isAdmin && (
             <button
               onClick={handleLogout}
               className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
@@ -169,8 +200,8 @@ export function Navigation({ currentPage, onNavigate }: NavigationProps) {
                 <LogOut className="w-5 h-5 text-red-600 dark:text-red-400" />
               </button>
             )}
-            {/* Hamburger Menu - only for non-admin */}
-            {!isAdmin && mobileMenuItems.length > 0 && (
+            {/* Hamburger Menu */}
+            {mobileMenuItems.length > 0 && (
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800"
@@ -186,9 +217,9 @@ export function Navigation({ currentPage, onNavigate }: NavigationProps) {
         </div>
       </header>
 
-      {/* Mobile Hamburger Menu Dropdown - only for non-admin */}
-      {mobileMenuOpen && !isAdmin && (
-        <div className="lg:hidden fixed top-14 left-0 right-0 z-40 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 shadow-lg">
+      {/* Mobile Hamburger Menu Dropdown */}
+      {mobileMenuOpen && mobileMenuItems.length > 0 && (
+        <div className="lg:hidden fixed left-0 right-0 z-40 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 shadow-lg" style={{ top: '56px' }}>
           <nav className="p-2">
             {mobileMenuItems.map((item) => {
               const Icon = item.icon;

@@ -1,7 +1,7 @@
-import { Star, ArrowLeft, Search, TrendingUp } from 'lucide-react';
+import { Star, ArrowLeft, Search, TrendingUp, CheckCircle, Trash2, ShieldCheck } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Note } from '../types';
-import { getNotes, setNoteTopSelling } from '../lib/firestore';
+import { getNotes, setNoteTopSelling, setNoteVerified, deleteNote } from '../lib/firestore';
 
 interface AdminNotesPageProps {
     onBack: () => void;
@@ -12,6 +12,7 @@ export function AdminNotesPage({ onBack }: AdminNotesPageProps) {
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [updating, setUpdating] = useState<string | null>(null);
+    const [deleting, setDeleting] = useState<string | null>(null);
 
     useEffect(() => {
         loadNotes();
@@ -39,6 +40,36 @@ export function AdminNotesPage({ onBack }: AdminNotesPageProps) {
             console.error('Error updating note:', error);
         } finally {
             setUpdating(null);
+        }
+    }
+
+    async function toggleVerified(noteId: string, currentValue: boolean) {
+        setUpdating(noteId);
+        try {
+            await setNoteVerified(noteId, !currentValue);
+            setNotes(notes.map(note =>
+                note.id === noteId ? { ...note, isVerified: !currentValue } : note
+            ));
+        } catch (error) {
+            console.error('Error updating note:', error);
+        } finally {
+            setUpdating(null);
+        }
+    }
+
+    async function handleDelete(noteId: string, title: string) {
+        if (!confirm(`Are you sure you want to delete "${title}"? This action cannot be undone.`)) {
+            return;
+        }
+        setDeleting(noteId);
+        try {
+            await deleteNote(noteId);
+            setNotes(notes.filter(note => note.id !== noteId));
+        } catch (error) {
+            console.error('Error deleting note:', error);
+            alert('Failed to delete note');
+        } finally {
+            setDeleting(null);
         }
     }
 
@@ -71,7 +102,7 @@ export function AdminNotesPage({ onBack }: AdminNotesPageProps) {
                         </div>
                         <div>
                             <h1 className="text-2xl text-gray-900 dark:text-white">Manage Notes</h1>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">Mark notes as top selling</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Verify, feature, or delete notes</p>
                         </div>
                     </div>
                 </div>
@@ -100,7 +131,8 @@ export function AdminNotesPage({ onBack }: AdminNotesPageProps) {
                                     <th className="px-6 py-4 text-left text-sm text-gray-600 dark:text-gray-400">Uploader</th>
                                     <th className="px-6 py-4 text-left text-sm text-gray-600 dark:text-gray-400">Price</th>
                                     <th className="px-6 py-4 text-left text-sm text-gray-600 dark:text-gray-400">Sales</th>
-                                    <th className="px-6 py-4 text-left text-sm text-gray-600 dark:text-gray-400">Top Selling</th>
+                                    <th className="px-6 py-4 text-left text-sm text-gray-600 dark:text-gray-400">Status</th>
+                                    <th className="px-6 py-4 text-left text-sm text-gray-600 dark:text-gray-400">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
@@ -123,23 +155,66 @@ export function AdminNotesPage({ onBack }: AdminNotesPageProps) {
                                         <td className="px-6 py-4 text-gray-700 dark:text-gray-300">₹{note.price}</td>
                                         <td className="px-6 py-4 text-gray-700 dark:text-gray-300">{note.salesCount}</td>
                                         <td className="px-6 py-4">
-                                            <button
-                                                onClick={() => toggleTopSelling(note.id, note.isTopSelling || false)}
-                                                disabled={updating === note.id}
-                                                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${note.isTopSelling
-                                                        ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border border-yellow-300 dark:border-yellow-700'
-                                                        : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-700'
-                                                    } ${updating === note.id ? 'opacity-50' : 'hover:scale-105'}`}
-                                            >
-                                                {updating === note.id ? (
-                                                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                                                ) : (
-                                                    <>
-                                                        <TrendingUp className="w-4 h-4" />
-                                                        {note.isTopSelling ? 'Top Selling' : 'Mark Top'}
-                                                    </>
+                                            <div className="flex flex-wrap gap-1">
+                                                {note.isVerified && (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs rounded-full">
+                                                        <ShieldCheck className="w-3 h-3" />
+                                                        Verified
+                                                    </span>
                                                 )}
-                                            </button>
+                                                {note.isTopSelling && (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-xs rounded-full">
+                                                        <TrendingUp className="w-3 h-3" />
+                                                        Top
+                                                    </span>
+                                                )}
+                                                {!note.isVerified && !note.isTopSelling && (
+                                                    <span className="text-gray-400 text-xs">None</span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex gap-2">
+                                                {/* Verify Button */}
+                                                <button
+                                                    onClick={() => toggleVerified(note.id, note.isVerified || false)}
+                                                    disabled={updating === note.id}
+                                                    className={`p-2 rounded-lg transition-all ${note.isVerified
+                                                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                                                        : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-green-100 dark:hover:bg-green-900/30 hover:text-green-700 dark:hover:text-green-400'
+                                                        } ${updating === note.id ? 'opacity-50' : ''}`}
+                                                    title={note.isVerified ? 'Remove verification' : 'Verify note'}
+                                                >
+                                                    <CheckCircle className="w-5 h-5" />
+                                                </button>
+
+                                                {/* Top Selling Button */}
+                                                <button
+                                                    onClick={() => toggleTopSelling(note.id, note.isTopSelling || false)}
+                                                    disabled={updating === note.id}
+                                                    className={`p-2 rounded-lg transition-all ${note.isTopSelling
+                                                        ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
+                                                        : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 hover:text-yellow-700 dark:hover:text-yellow-400'
+                                                        } ${updating === note.id ? 'opacity-50' : ''}`}
+                                                    title={note.isTopSelling ? 'Remove from top selling' : 'Mark as top selling'}
+                                                >
+                                                    <TrendingUp className="w-5 h-5" />
+                                                </button>
+
+                                                {/* Delete Button */}
+                                                <button
+                                                    onClick={() => handleDelete(note.id, note.title)}
+                                                    disabled={deleting === note.id}
+                                                    className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-400 transition-all"
+                                                    title="Delete note"
+                                                >
+                                                    {deleting === note.id ? (
+                                                        <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                                                    ) : (
+                                                        <Trash2 className="w-5 h-5" />
+                                                    )}
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -149,7 +224,7 @@ export function AdminNotesPage({ onBack }: AdminNotesPageProps) {
 
                     {filteredNotes.length === 0 && (
                         <div className="p-12 text-center text-gray-500 dark:text-gray-400">
-                            No notes found
+                            {searchQuery ? 'No notes found matching your search' : 'No notes found'}
                         </div>
                     )}
                 </div>
