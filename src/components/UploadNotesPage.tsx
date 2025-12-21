@@ -1,9 +1,10 @@
-import { Upload, Image, FileText, IndianRupee, Tag, File } from 'lucide-react';
+import { Upload, Image, FileText, IndianRupee, Tag, File, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { NoteCategory } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { createNote } from '../lib/firestore';
 import { uploadNotePreview, uploadNoteFile } from '../lib/storage';
+import { extractPdfPreviews } from '../lib/pdfUtils';
 
 export function UploadNotesPage() {
   const { user, userProfile } = useAuth();
@@ -15,6 +16,7 @@ export function UploadNotesPage() {
   const [pdfFiles, setPdfFiles] = useState<File[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [extracting, setExtracting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
   const [error, setError] = useState('');
 
@@ -32,7 +34,7 @@ export function UploadNotesPage() {
     }
 
     if (previewFiles.length === 0) {
-      setError('Please upload at least one preview image');
+      setError('Please upload a PDF file first - previews will be auto-generated');
       return;
     }
 
@@ -100,9 +102,33 @@ export function UploadNotesPage() {
     }
   };
 
-  const handlePdfFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setPdfFiles(Array.from(e.target.files));
+  const handlePdfFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const files = Array.from(e.target.files);
+
+      // Validate that all files are PDFs
+      const nonPdfFiles = files.filter(file => file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf'));
+      if (nonPdfFiles.length > 0) {
+        setError('Only PDF files are supported. Please upload PDF files only.');
+        e.target.value = ''; // Clear the input
+        return;
+      }
+
+      setPdfFiles(files);
+      setPreviewFiles([]);
+
+      // Auto-extract previews from the first PDF
+      setExtracting(true);
+      setError('');
+      try {
+        const previews = await extractPdfPreviews(files[0], 4);
+        setPreviewFiles(previews);
+      } catch (err) {
+        console.error('Error extracting previews:', err);
+        setError('Could not extract previews. Please try a different PDF file.');
+      } finally {
+        setExtracting(false);
+      }
     }
   };
 
@@ -239,26 +265,38 @@ export function UploadNotesPage() {
               )}
             </div>
 
-            {/* Preview Pages */}
+            {/* Preview Pages - Auto-generated */}
             <div>
               <label className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-2">
                 <Image className="w-4 h-4" />
-                <span>Preview Images *</span>
+                <span>Preview Images (Auto-generated)</span>
               </label>
-              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
-                Upload 1-3 preview images (screenshots of your notes) to show potential buyers
-              </p>
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={handlePreviewFileChange}
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-blue-600 file:text-white hover:file:bg-blue-700 text-gray-900 dark:text-white"
-              />
-              {previewFiles.length > 0 && (
-                <div className="mt-3 text-sm text-gray-600 dark:text-gray-400">
-                  {previewFiles.length} preview image(s) selected
+              {extracting ? (
+                <div className="flex items-center gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
+                  <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+                  <span className="text-blue-700 dark:text-blue-300">Extracting preview pages from PDF...</span>
                 </div>
+              ) : previewFiles.length > 0 ? (
+                <div className="space-y-3">
+                  <div className="text-sm text-green-600 dark:text-green-400">
+                    ✓ {previewFiles.length} preview page(s) extracted from PDF
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {previewFiles.map((file, index) => (
+                      <div key={index} className="aspect-[8.5/11] bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
+                        <img
+                          src={URL.createObjectURL(file)}
+                          alt={`Preview ${index + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-gray-500 dark:text-gray-400 text-sm">
+                  Upload a PDF above - the first 4 pages will be automatically extracted as previews
+                </p>
               )}
             </div>
 
@@ -287,9 +325,9 @@ export function UploadNotesPage() {
         <div className="mt-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-6">
           <h3 className="text-blue-900 dark:text-blue-200 mb-3">Upload Guidelines</h3>
           <ul className="space-y-2 text-blue-800 dark:text-blue-300 text-sm">
+            <li>• Only PDF files are supported</li>
+            <li>• Preview images are automatically extracted from your PDF (first 4 pages)</li>
             <li>• Ensure your notes are original or you have permission to sell them</li>
-            <li>• You can upload multiple PDF files for a single note listing</li>
-            <li>• Provide 1-3 preview images showing sample pages from your notes</li>
             <li>• Write an accurate description of what's included</li>
             <li>• Price your notes fairly based on content quality and length</li>
           </ul>
