@@ -1,4 +1,4 @@
-import { Home, Download, Bookmark, IndianRupee, User, Upload, Menu, X, Moon, Sun, Settings, MessageSquare, Shield, Users, FileText, LogOut, Wallet, FileQuestion, LogIn } from 'lucide-react';
+import { Home, Download, Bookmark, IndianRupee, User, Upload, Menu, X, Moon, Sun, Settings, MessageSquare, Shield, Users, FileText, LogOut, Wallet, FileQuestion, LogIn, BookOpen } from 'lucide-react';
 import { useState } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -41,6 +41,7 @@ export function Navigation({ currentPage, onNavigate, onLoginRequest }: Navigati
   const adminMenuItems = [
     { id: 'admin', label: 'Dashboard', icon: Shield },
     { id: 'admin-users', label: 'Manage Users', icon: Users },
+    { id: 'admin-pyqs', label: 'Free PYQs', icon: BookOpen },
     { id: 'admin-payouts', label: 'Payouts', icon: Wallet },
     { id: 'admin-requests', label: 'Note Requests', icon: FileQuestion },
     { id: 'admin-earnings', label: 'User Earnings', icon: IndianRupee },

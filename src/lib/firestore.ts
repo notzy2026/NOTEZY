@@ -14,7 +14,7 @@ import {
     increment,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Note, UserProfile, NoteCategory, SupportChat, ChatMessage, Review, PayoutRequest, NoteRequest } from '../types';
+import { Note, UserProfile, NoteCategory, SupportChat, ChatMessage, Review, PayoutRequest, NoteRequest, FreePYQ } from '../types';
 
 // Collection references
 const usersCollection = collection(db, 'users');
@@ -24,6 +24,7 @@ const bookmarksCollection = collection(db, 'bookmarks');
 const reviewsCollection = collection(db, 'reviews');
 const payoutsCollection = collection(db, 'payouts');
 const noteRequestsCollection = collection(db, 'noteRequests');
+const freePYQsCollection = collection(db, 'freePYQs');
 const settingsDoc = doc(db, 'settings', 'platform');
 
 // ============ USER FUNCTIONS ============
@@ -793,4 +794,45 @@ export async function closeNoteRequest(requestId: string): Promise<void> {
     await updateDoc(doc(noteRequestsCollection, requestId), {
         status: 'closed',
     });
+}
+
+// ============ FREE PYQ FUNCTIONS ============
+
+export async function addFreePYQ(
+    courseCode: string,
+    courseName: string,
+    driveLink: string,
+    addedBy: string
+): Promise<string> {
+    const docRef = await addDoc(freePYQsCollection, {
+        courseCode,
+        courseName,
+        driveLink,
+        addedAt: Timestamp.now(),
+        addedBy,
+    });
+    return docRef.id;
+}
+
+export async function getFreePYQs(): Promise<FreePYQ[]> {
+    const q = query(freePYQsCollection, orderBy('addedAt', 'desc'));
+    const querySnapshot = await getDocs(q);
+
+    return querySnapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+            id: docSnap.id,
+            courseCode: data.courseCode,
+            courseName: data.courseName,
+            driveLink: data.driveLink,
+            addedAt: data.addedAt instanceof Timestamp
+                ? data.addedAt.toDate().toISOString()
+                : data.addedAt,
+            addedBy: data.addedBy,
+        };
+    });
+}
+
+export async function deleteFreePYQ(pyqId: string): Promise<void> {
+    await deleteDoc(doc(freePYQsCollection, pyqId));
 }

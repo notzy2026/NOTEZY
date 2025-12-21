@@ -29,6 +29,7 @@ import { AdminChatPage } from './components/AdminChatPage';
 import { AdminUsersPage } from './components/AdminUsersPage';
 import { AdminPayoutsPage } from './components/AdminPayoutsPage';
 import { AdminRequestsPage } from './components/AdminRequestsPage';
+import { AdminFreePYQPage } from './components/AdminFreePYQPage';
 import { MyRequestsPage } from './components/MyRequestsPage';
 import { LoginPromptModal } from './components/LoginPromptModal';
 import {
@@ -38,7 +39,7 @@ import {
   PublicShippingPage,
   ContactUsPage
 } from './components/pages';
-import { Note, UserProfile } from './types';
+import { Note, UserProfile, FreePYQ } from './types';
 import {
   getNotes,
   getUserPurchases,
@@ -48,6 +49,7 @@ import {
   addBookmark,
   removeBookmark,
   getNoteById,
+  getFreePYQs,
 } from './lib/firestore';
 import { useRazorpay } from './hooks/useRazorpay';
 
@@ -74,18 +76,23 @@ function AppContent() {
 
   // Data from Firestore
   const [notes, setNotes] = useState<Note[]>([]);
+  const [freePYQs, setFreePYQs] = useState<FreePYQ[]>([]);
   const [purchasedNotes, setPurchasedNotes] = useState<Note[]>([]);
   const [bookmarkedNotes, setBookmarkedNotes] = useState<Note[]>([]);
   const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
   const [purchasedIds, setPurchasedIds] = useState<string[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
 
-  // Fetch notes from Firestore on mount
+  // Fetch notes and free PYQs from Firestore on mount
   useEffect(() => {
     async function fetchNotes() {
       try {
-        const allNotes = await getNotes();
+        const [allNotes, allPYQs] = await Promise.all([
+          getNotes(),
+          getFreePYQs()
+        ]);
         setNotes(allNotes);
+        setFreePYQs(allPYQs);
       } catch (error) {
         console.error('Error fetching notes:', error);
       }
@@ -319,6 +326,7 @@ function AppContent() {
       {currentPage === 'home' && (
         <HomePage
           notes={notes}
+          freePYQs={freePYQs}
           onPreview={setPreviewNote}
           onBookmark={handleBookmark}
           onPurchase={handlePurchase}
@@ -423,6 +431,10 @@ function AppContent() {
 
       {currentPage === 'admin-requests' && (
         <AdminRequestsPage onBack={() => setCurrentPage('admin')} />
+      )}
+
+      {currentPage === 'admin-pyqs' && (
+        <AdminFreePYQPage onBack={() => setCurrentPage('admin')} />
       )}
 
       {currentPage === 'my-requests' && (

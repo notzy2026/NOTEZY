@@ -184,7 +184,6 @@ export function UploadNotesPage() {
                 className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
               >
                 <option value="assignment">Assignment</option>
-                <option value="pyq">PYQ Paper</option>
                 <option value="lecture-notes">Lecture Notes</option>
               </select>
             </div>

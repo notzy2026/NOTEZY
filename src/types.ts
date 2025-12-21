@@ -1,4 +1,4 @@
-export type NoteCategory = 'assignment' | 'pyq' | 'lecture-notes';
+export type NoteCategory = 'assignment' | 'lecture-notes';
 
 export interface Note {
   id: string;
@@ -17,6 +17,15 @@ export interface Note {
   uploadDate: string;
   isTopSelling?: boolean;
   isVerified?: boolean;
+}
+
+export interface FreePYQ {
+  id: string;
+  courseCode: string;
+  courseName: string;
+  driveLink: string;
+  addedAt: string;
+  addedBy: string;
 }
 
 export interface Review {
@@ -91,3 +100,4 @@ export interface NoteRequest {
   responseLink?: string;
   respondedAt?: string;
 }
+

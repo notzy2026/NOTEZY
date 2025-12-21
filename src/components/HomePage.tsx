@@ -1,10 +1,11 @@
-import { Search, FileText, BookOpen, Library } from 'lucide-react';
-import { Note } from '../types';
+import { Search, FileText, BookOpen, Library, ExternalLink } from 'lucide-react';
+import { Note, FreePYQ } from '../types';
 import { NoteCard } from './NoteCard';
 import { useState } from 'react';
 
 interface HomePageProps {
   notes: Note[];
+  freePYQs: FreePYQ[];
   onPreview: (note: Note) => void;
   onBookmark: (noteId: string) => void;
   onPurchase: (noteId: string) => void;
@@ -17,6 +18,7 @@ interface HomePageProps {
 
 export function HomePage({
   notes,
+  freePYQs,
   onPreview,
   onBookmark,
   onPurchase,
@@ -38,12 +40,20 @@ export function HomePage({
   const filteredNotes = notes.filter(note => {
     const matchesSearch = note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       note.description.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = !selectedCategory || note.category === selectedCategory;
+    const matchesCategory = !selectedCategory || selectedCategory === 'pyq' || note.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
 
+  // Filter PYQs based on search
+  const filteredPYQs = freePYQs.filter(pyq =>
+    pyq.courseCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    pyq.courseName.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   // Top purchased notes (sorted by sales count)
   const topNotes = [...notes].sort((a, b) => b.salesCount - a.salesCount).slice(0, 8);
+
+  const showPYQs = selectedCategory === 'pyq';
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-950 pb-24 lg:pb-8 lg:ml-64 mobile-page-content">
@@ -69,6 +79,9 @@ export function HomePage({
           {categories.map((category) => {
             const Icon = category.icon;
             const isSelected = selectedCategory === category.id;
+            const itemCount = category.id === 'pyq'
+              ? freePYQs.length
+              : notes.filter(n => n.category === category.id).length;
 
             return (
               <button
@@ -83,7 +96,7 @@ export function HomePage({
                 <div className="text-left">
                   <div className="text-white">{category.label}</div>
                   <div className="text-white text-opacity-90 text-sm">
-                    {notes.filter(n => n.category === category.id).length} items
+                    {itemCount} {category.id === 'pyq' ? 'free papers' : 'items'}
                   </div>
                 </div>
               </button>
@@ -91,34 +104,76 @@ export function HomePage({
           })}
         </div>
 
-        {/* Top Purchased Notes */}
+        {/* Content Section */}
         <div>
           <h2 className="text-gray-900 dark:text-white mb-6">
             {selectedCategory
-              ? `${categories.find(c => c.id === selectedCategory)?.label}`
+              ? `${categories.find(c => c.id === selectedCategory)?.label}${showPYQs ? ' (Free)' : ''}`
               : 'Top Purchased Notes'}
           </h2>
 
-          {filteredNotes.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {(selectedCategory ? filteredNotes : topNotes).map((note) => (
-                <NoteCard
-                  key={note.id}
-                  note={note}
-                  onPreview={onPreview}
-                  onBookmark={onBookmark}
-                  onPurchase={onPurchase}
-                  onViewNotes={onViewNotes}
-                  isBookmarked={bookmarkedIds.includes(note.id)}
-                  isPurchased={purchasedIds.includes(note.id)}
-                />
-              ))}
-            </div>
+          {showPYQs ? (
+            // Show Free PYQ Cards
+            filteredPYQs.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {filteredPYQs.map((pyq) => (
+                  <a
+                    key={pyq.id}
+                    href={pyq.driveLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 p-6 hover:shadow-xl hover:border-green-300 dark:hover:border-green-700 transition-all group"
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-3 rounded-xl">
+                        <BookOpen className="w-6 h-6 text-white" />
+                      </div>
+                      <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs px-2 py-1 rounded-lg font-medium">
+                        FREE
+                      </span>
+                    </div>
+                    <h3 className="text-lg text-gray-900 dark:text-white mb-1 group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors">
+                      {pyq.courseCode}
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 line-clamp-2">
+                      {pyq.courseName}
+                    </p>
+                    <div className="flex items-center gap-2 text-green-600 dark:text-green-400 text-sm font-medium">
+                      <ExternalLink className="w-4 h-4" />
+                      Open in Google Drive
+                    </div>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800">
+                <BookOpen className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-slate-700" />
+                <p className="text-gray-500 dark:text-slate-400">No PYQ papers available yet</p>
+              </div>
+            )
           ) : (
-            <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800">
-              <Search className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-slate-700" />
-              <p className="text-gray-500 dark:text-slate-400">No notes found matching your search</p>
-            </div>
+            // Show Regular Notes
+            filteredNotes.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {(selectedCategory ? filteredNotes : topNotes).map((note) => (
+                  <NoteCard
+                    key={note.id}
+                    note={note}
+                    onPreview={onPreview}
+                    onBookmark={onBookmark}
+                    onPurchase={onPurchase}
+                    onViewNotes={onViewNotes}
+                    isBookmarked={bookmarkedIds.includes(note.id)}
+                    isPurchased={purchasedIds.includes(note.id)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800">
+                <Search className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-slate-700" />
+                <p className="text-gray-500 dark:text-slate-400">No notes found matching your search</p>
+              </div>
+            )
           )}
         </div>
       </div>
