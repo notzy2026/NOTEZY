@@ -59,8 +59,6 @@ export function AdminFreePYQPage({ onBack }: AdminFreePYQPageProps) {
     }
 
     async function handleDelete(pyqId: string) {
-        if (!confirm('Are you sure you want to delete this PYQ?')) return;
-
         try {
             await deleteFreePYQ(pyqId);
             setPyqs(prev => prev.filter(p => p.id !== pyqId));
