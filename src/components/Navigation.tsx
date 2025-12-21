@@ -75,6 +75,7 @@ export function Navigation({ currentPage, onNavigate, onLoginRequest }: Navigati
   // Mobile hamburger menu items (not in bottom navbar)
   const mobileMenuItems = (isAdmin && !isGuest)
     ? [
+      { id: 'admin-pyqs', label: 'Free PYQs', icon: BookOpen },
       { id: 'admin-payouts', label: 'Payouts', icon: Wallet },
       { id: 'admin-requests', label: 'Note Requests', icon: FileQuestion },
       { id: 'admin-earnings', label: 'User Earnings', icon: IndianRupee },
