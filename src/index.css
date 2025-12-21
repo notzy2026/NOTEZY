@@ -3770,10 +3770,11 @@ html {
   }
 }
 
-/* Mobile Navigation Padding - ensures content clears the fixed header */
+/* Mobile Navigation Padding - ensures content clears the fixed header and bottom navbar */
 @media (max-width: 1023px) {
   .mobile-page-content {
     padding-top: 70px !important;
+    padding-bottom: 100px !important;
   }
 }
 
