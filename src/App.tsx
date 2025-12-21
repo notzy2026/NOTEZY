@@ -335,6 +335,7 @@ function AppContent() {
           purchasedIds={purchasedIds}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
+          onRequestNotes={() => setCurrentPage('my-requests')}
         />
       )}
 

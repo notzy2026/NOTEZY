@@ -1,4 +1,4 @@
-import { Search, FileText, BookOpen, Library, ExternalLink } from 'lucide-react';
+import { Search, FileText, BookOpen, Library, ExternalLink, FileQuestion } from 'lucide-react';
 import { Note, FreePYQ } from '../types';
 import { NoteCard } from './NoteCard';
 import { useState } from 'react';
@@ -14,6 +14,7 @@ interface HomePageProps {
   purchasedIds: string[];
   searchQuery: string;
   onSearchChange?: (query: string) => void;
+  onRequestNotes?: () => void;
 }
 
 export function HomePage({
@@ -26,7 +27,8 @@ export function HomePage({
   bookmarkedIds,
   purchasedIds,
   searchQuery,
-  onSearchChange
+  onSearchChange,
+  onRequestNotes
 }: HomePageProps) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
@@ -171,7 +173,17 @@ export function HomePage({
             ) : (
               <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800">
                 <Search className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-slate-700" />
-                <p className="text-gray-500 dark:text-slate-400">No notes found matching your search</p>
+                <p className="text-gray-500 dark:text-slate-400 mb-4">No notes found matching your search</p>
+                {onRequestNotes && searchQuery && (
+                  <button
+                    onClick={onRequestNotes}
+                    className="inline-flex items-center gap-2 px-6 py-3 text-white rounded-xl hover:opacity-90 transition-colors"
+                    style={{ backgroundColor: '#8b5cf6' }}
+                  >
+                    <FileQuestion className="w-5 h-5" />
+                    Request "{searchQuery}"
+                  </button>
+                )}
               </div>
             )
           )}
