@@ -1,10 +1,12 @@
-import { Upload, Image, FileText, IndianRupee, Tag, File, Loader2 } from 'lucide-react';
-import { useState } from 'react';
-import { NoteCategory } from '../types';
+import { Upload, Image, FileText, IndianRupee, Tag, File, Loader2, BookOpen, Plus } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { NoteCategory, Course } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { createNote } from '../lib/firestore';
+import { createNote, getCourses, addCourse } from '../lib/firestore';
 import { uploadNotePreview, uploadNoteFile } from '../lib/storage';
 import { extractPdfPreviews } from '../lib/pdfUtils';
+import { compressPdf, formatFileSize, CompressionResult } from '../lib/compressPdf';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 export function UploadNotesPage() {
   const { user, userProfile } = useAuth();
@@ -19,6 +21,51 @@ export function UploadNotesPage() {
   const [extracting, setExtracting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
   const [error, setError] = useState('');
+  const [compressionResults, setCompressionResults] = useState<CompressionResult[]>([]);
+
+  // PYQ specific state
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [selectedCourseCode, setSelectedCourseCode] = useState('');
+  const [selectedCourseName, setSelectedCourseName] = useState('');
+  const [isAddingNewCourse, setIsAddingNewCourse] = useState(false);
+  const [newCourseCode, setNewCourseCode] = useState('');
+  const [newCourseName, setNewCourseName] = useState('');
+  const [loadingCourses, setLoadingCourses] = useState(false);
+
+  // Load courses when PYQ is selected
+  useEffect(() => {
+    if (category === 'pyq') {
+      loadCourses();
+    }
+  }, [category]);
+
+  const loadCourses = async () => {
+    setLoadingCourses(true);
+    try {
+      const coursesData = await getCourses();
+      setCourses(coursesData);
+    } catch (err) {
+      console.error('Error loading courses:', err);
+    } finally {
+      setLoadingCourses(false);
+    }
+  };
+
+  const handleCourseCodeChange = (code: string) => {
+    if (code === '__new__') {
+      setIsAddingNewCourse(true);
+      setSelectedCourseCode('');
+      setSelectedCourseName('');
+    } else {
+      setIsAddingNewCourse(false);
+      setSelectedCourseCode(code);
+      // Auto-fill course name
+      const course = courses.find(c => c.courseCode === code);
+      if (course) {
+        setSelectedCourseName(course.courseName);
+      }
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,9 +80,22 @@ export function UploadNotesPage() {
       return;
     }
 
+    // PYQ validation
+    if (category === 'pyq') {
+      const courseCode = isAddingNewCourse ? newCourseCode : selectedCourseCode;
+      const courseName = isAddingNewCourse ? newCourseName : selectedCourseName;
+
+      if (!courseCode || !courseName) {
+        setError('Please select or enter course code and name');
+        return;
+      }
+    }
+
+    // If preview extraction failed, create a placeholder preview from the first PDF
+    let finalPreviewFiles = previewFiles;
     if (previewFiles.length === 0) {
-      setError('Please upload a PDF file first - previews will be auto-generated');
-      return;
+      console.warn('No preview files - proceeding with empty previews');
+      // We'll allow upload without previews but show a warning
     }
 
     setError('');
@@ -45,51 +105,116 @@ export function UploadNotesPage() {
       // Generate a temporary ID for organizing uploads
       const tempId = `note_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-      // Upload all PDF files to Firebase Storage
-      setUploadProgress(`Uploading ${pdfFiles.length} PDF file(s)...`);
-      const pdfUrls: string[] = [];
-      for (let i = 0; i < pdfFiles.length; i++) {
-        setUploadProgress(`Uploading PDF ${i + 1} of ${pdfFiles.length}...`);
-        const url = await uploadNoteFile(pdfFiles[i], `${tempId}_${i}`);
-        pdfUrls.push(url);
+      // Handle PYQ uploads differently
+      if (category === 'pyq') {
+        const courseCode = isAddingNewCourse ? newCourseCode : selectedCourseCode;
+        const courseName = isAddingNewCourse ? newCourseName : selectedCourseName;
+
+        // Add new course if needed
+        if (isAddingNewCourse) {
+          setUploadProgress('Adding new course...');
+          await addCourse(courseCode, courseName);
+        }
+
+        // Upload PDF to Firebase Storage (temporary)
+        setUploadProgress('Uploading PDF to temporary storage...');
+        const pyqNoteId = `pyq_temp/${tempId}`;
+        await uploadNoteFile(pdfFiles[0], pyqNoteId);
+
+        // Call Cloud Function to transfer to Google Drive
+        setUploadProgress('Transferring to Google Drive...');
+        const functions = getFunctions();
+        const uploadPYQToDrive = httpsCallable(functions, 'uploadPYQToDrive');
+
+        const result = await uploadPYQToDrive({
+          storagePath: `notes/${pyqNoteId}/document.pdf`,
+          courseCode,
+          courseName,
+          fileName: pdfFiles[0].name,
+        });
+
+        console.log('PYQ uploaded to Drive:', result.data);
+
+        setSubmitted(true);
+        setUploadProgress('');
+        setTimeout(() => {
+          setSubmitted(false);
+          setCategory('assignment');
+          setPdfFiles([]);
+          setSelectedCourseCode('');
+          setSelectedCourseName('');
+          setNewCourseCode('');
+          setNewCourseName('');
+          setIsAddingNewCourse(false);
+        }, 3000);
+      } else {
+        // Regular note upload flow
+        // Compress all PDF files before uploading
+        setUploadProgress(`Compressing ${pdfFiles.length} PDF file(s)...`);
+        const compressedFiles: File[] = [];
+        const compressionResultsList: CompressionResult[] = [];
+
+        for (let i = 0; i < pdfFiles.length; i++) {
+          setUploadProgress(`Compressing PDF ${i + 1} of ${pdfFiles.length}...`);
+          try {
+            const result = await compressPdf(pdfFiles[i]);
+            compressedFiles.push(result.compressedFile);
+            compressionResultsList.push(result);
+          } catch (compressError) {
+            console.error(`Error compressing PDF ${i + 1}:`, compressError);
+            // If compression fails, use original file
+            compressedFiles.push(pdfFiles[i]);
+          }
+        }
+        setCompressionResults(compressionResultsList);
+
+        // Upload all compressed PDF files to Firebase Storage
+        setUploadProgress(`Uploading ${compressedFiles.length} PDF file(s)...`);
+        const pdfUrls: string[] = [];
+        for (let i = 0; i < compressedFiles.length; i++) {
+          setUploadProgress(`Uploading PDF ${i + 1} of ${compressedFiles.length}...`);
+          const url = await uploadNoteFile(compressedFiles[i], `${tempId}_${i}`);
+          pdfUrls.push(url);
+        }
+
+        // Upload preview images to Firebase Storage
+        setUploadProgress('Uploading preview images...');
+        const previewUrls: string[] = [];
+        for (let i = 0; i < previewFiles.length; i++) {
+          const url = await uploadNotePreview(previewFiles[i], tempId, i);
+          previewUrls.push(url);
+        }
+
+        // Create note document in Firestore
+        setUploadProgress('Creating note...');
+        await createNote({
+          title,
+          description,
+          category,
+          price: parseFloat(price),
+          previewPages: previewUrls,
+          thumbnailUrl: previewUrls[0] || '',
+          pdfUrls,
+          uploaderId: user.uid,
+          uploaderName: userProfile.name,
+        });
+
+        setSubmitted(true);
+        setUploadProgress('');
+        setTimeout(() => {
+          setSubmitted(false);
+          setTitle('');
+          setDescription('');
+          setPrice('');
+          setCategory('assignment');
+          setPreviewFiles([]);
+          setPdfFiles([]);
+          setCompressionResults([]);
+        }, 3000);
       }
-
-      // Upload preview images to Firebase Storage
-      setUploadProgress('Uploading preview images...');
-      const previewUrls: string[] = [];
-      for (let i = 0; i < previewFiles.length; i++) {
-        const url = await uploadNotePreview(previewFiles[i], tempId, i);
-        previewUrls.push(url);
-      }
-
-      // Create note document in Firestore
-      setUploadProgress('Creating note...');
-      await createNote({
-        title,
-        description,
-        category,
-        price: parseFloat(price),
-        previewPages: previewUrls,
-        thumbnailUrl: previewUrls[0] || '',
-        pdfUrls,
-        uploaderId: user.uid,
-        uploaderName: userProfile.name,
-      });
-
-      setSubmitted(true);
-      setUploadProgress('');
-      setTimeout(() => {
-        setSubmitted(false);
-        setTitle('');
-        setDescription('');
-        setPrice('');
-        setCategory('assignment');
-        setPreviewFiles([]);
-        setPdfFiles([]);
-      }, 3000);
     } catch (err) {
-      console.error('Error uploading note:', err);
-      setError('Failed to upload note. Please try again.');
+      console.error('Error uploading:', err);
+      setError(category === 'pyq' ? 'Failed to upload PYQ. Please try again.' : 'Failed to upload note. Please try again.');
       setUploadProgress('');
     } finally {
       setUploading(false);
@@ -166,38 +291,6 @@ export function UploadNotesPage() {
               </div>
             )}
 
-            {/* Title */}
-            <div>
-              <label className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-2">
-                <FileText className="w-4 h-4" />
-                <span>Note Title *</span>
-              </label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g., Advanced Mathematics Assignment Solutions"
-                required
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-              />
-            </div>
-
-            {/* Description */}
-            <div>
-              <label className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-2">
-                <FileText className="w-4 h-4" />
-                <span>Description *</span>
-              </label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Describe what's included in your notes..."
-                required
-                rows={4}
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-              />
-            </div>
-
             {/* Category */}
             <div>
               <label className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-2">
@@ -214,23 +307,145 @@ export function UploadNotesPage() {
               </select>
             </div>
 
-            {/* Price */}
-            <div>
-              <label className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-2">
-                <IndianRupee className="w-4 h-4" />
-                <span>Price (₹ INR) *</span>
-              </label>
-              <input
-                type="number"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                placeholder="9.99"
-                step="0.01"
-                min="0"
-                required
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-              />
-            </div>
+            {/* Conditional Fields based on Category */}
+            {category === 'pyq' ? (
+              <>
+                {/* PYQ Info Banner */}
+                <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl">
+                  <p className="text-green-700 dark:text-green-300 text-sm">
+                    <BookOpen className="w-4 h-4 inline mr-2" />
+                    PYQ papers are shared for free with the community and stored securely on Google Drive.
+                  </p>
+                </div>
+
+                {/* Course Code */}
+                <div>
+                  <label className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-2">
+                    <BookOpen className="w-4 h-4" />
+                    <span>Course Code *</span>
+                  </label>
+                  {loadingCourses ? (
+                    <div className="flex items-center gap-2 text-gray-500">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Loading courses...
+                    </div>
+                  ) : (
+                    <select
+                      value={isAddingNewCourse ? '__new__' : selectedCourseCode}
+                      onChange={(e) => handleCourseCodeChange(e.target.value)}
+                      className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                    >
+                      <option value="">Select course code...</option>
+                      {courses.map((course) => (
+                        <option key={course.id} value={course.courseCode}>
+                          {course.courseCode} - {course.courseName}
+                        </option>
+                      ))}
+                      <option value="__new__">+ Add New Course</option>
+                    </select>
+                  )}
+                </div>
+
+                {/* New Course Fields (if adding new) */}
+                {isAddingNewCourse && (
+                  <div className="space-y-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl">
+                    <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300 text-sm font-medium">
+                      <Plus className="w-4 h-4" />
+                      Add New Course
+                    </div>
+                    <div>
+                      <label className="block text-gray-700 dark:text-gray-300 mb-1 text-sm">New Course Code *</label>
+                      <input
+                        type="text"
+                        value={newCourseCode}
+                        onChange={(e) => setNewCourseCode(e.target.value.toUpperCase())}
+                        placeholder="e.g., CS101"
+                        className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-gray-700 dark:text-gray-300 mb-1 text-sm">New Course Name *</label>
+                      <input
+                        type="text"
+                        value={newCourseName}
+                        onChange={(e) => setNewCourseName(e.target.value)}
+                        placeholder="e.g., Introduction to Computer Science"
+                        className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Course Name (read-only if selected from dropdown) */}
+                {!isAddingNewCourse && selectedCourseCode && (
+                  <div>
+                    <label className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-2">
+                      <FileText className="w-4 h-4" />
+                      <span>Course Name</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={selectedCourseName}
+                      readOnly
+                      className="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-700 rounded-xl text-gray-700 dark:text-gray-300"
+                    />
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                {/* Regular Note Fields */}
+                {/* Title */}
+                <div>
+                  <label className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-2">
+                    <FileText className="w-4 h-4" />
+                    <span>Note Title *</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="e.g., Advanced Mathematics Assignment Solutions"
+                    required
+                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                  />
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-2">
+                    <FileText className="w-4 h-4" />
+                    <span>Description *</span>
+                  </label>
+                  <textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Describe what's included in your notes..."
+                    required
+                    rows={4}
+                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                  />
+                </div>
+
+                {/* Price */}
+                <div>
+                  <label className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-2">
+                    <IndianRupee className="w-4 h-4" />
+                    <span>Price (₹ INR) *</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    placeholder="9.99"
+                    step="0.01"
+                    min="0"
+                    required
+                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                  />
+                </div>
+              </>
+            )}
 
             {/* PDF Files Upload */}
             <div>
@@ -261,44 +476,62 @@ export function UploadNotesPage() {
                       </div>
                     ))}
                   </div>
+                  {/* Compression Results Display */}
+                  {compressionResults.length > 0 && (
+                    <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                      <div className="text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">
+                        📦 Compression Results
+                      </div>
+                      {compressionResults.map((result, index) => (
+                        <div key={index} className="text-xs text-blue-700 dark:text-blue-400 mb-1">
+                          {pdfFiles[index]?.name}: {formatFileSize(result.originalSize)} → {formatFileSize(result.compressedSize)}
+                          <span className="ml-2 px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded">
+                            {result.compressionRatio > 0 ? `${result.compressionRatio.toFixed(0)}% smaller` : 'No reduction'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
 
-            {/* Preview Pages - Auto-generated */}
-            <div>
-              <label className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-2">
-                <Image className="w-4 h-4" />
-                <span>Preview Images (Auto-generated)</span>
-              </label>
-              {extracting ? (
-                <div className="flex items-center gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
-                  <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
-                  <span className="text-blue-700 dark:text-blue-300">Extracting preview pages from PDF...</span>
-                </div>
-              ) : previewFiles.length > 0 ? (
-                <div className="space-y-3">
-                  <div className="text-sm text-green-600 dark:text-green-400">
-                    ✓ {previewFiles.length} preview page(s) extracted from PDF
+            {/* Preview Pages - Auto-generated (only for non-PYQ) */}
+            {category !== 'pyq' && (
+              <div>
+                <label className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-2">
+                  <Image className="w-4 h-4" />
+                  <span>Preview Images (Auto-generated)</span>
+                </label>
+                {extracting ? (
+                  <div className="flex items-center gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
+                    <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+                    <span className="text-blue-700 dark:text-blue-300">Extracting preview pages from PDF...</span>
                   </div>
-                  <div className="grid grid-cols-4 gap-2">
-                    {previewFiles.map((file, index) => (
-                      <div key={index} className="aspect-[8.5/11] bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
-                        <img
-                          src={URL.createObjectURL(file)}
-                          alt={`Preview ${index + 1}`}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    ))}
+                ) : previewFiles.length > 0 ? (
+                  <div className="space-y-3">
+                    <div className="text-sm text-green-600 dark:text-green-400">
+                      ✓ {previewFiles.length} preview page(s) extracted from PDF
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                      {previewFiles.map((file, index) => (
+                        <div key={index} className="aspect-[8.5/11] bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
+                          <img
+                            src={URL.createObjectURL(file)}
+                            alt={`Preview ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <p className="text-gray-500 dark:text-gray-400 text-sm">
-                  Upload a PDF above - the first 4 pages will be automatically extracted as previews
-                </p>
-              )}
-            </div>
+                ) : (
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">
+                    Upload a PDF above - the first 4 pages will be automatically extracted as previews
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Submit Button */}
             <button
@@ -333,6 +566,6 @@ export function UploadNotesPage() {
           </ul>
         </div>
       </div>
-    </div>
+    </div >
   );
 }

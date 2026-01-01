@@ -15,10 +15,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   });
 
   useEffect(() => {
-    // Update localStorage when theme changes
+    const root = window.document.documentElement;
+    // Update localStorage and DOM when theme changes
     if (isDark) {
+      root.classList.add('dark');
       localStorage.setItem('theme', 'dark');
     } else {
+      root.classList.remove('dark');
       localStorage.setItem('theme', 'light');
     }
   }, [isDark]);
@@ -29,9 +32,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   return (
     <ThemeContext.Provider value={{ isDark, toggleTheme }}>
-      <div className={isDark ? 'dark' : ''}>
-        {children}
-      </div>
+      {children}
     </ThemeContext.Provider>
   );
 }

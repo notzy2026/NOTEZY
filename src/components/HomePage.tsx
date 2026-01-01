@@ -33,9 +33,9 @@ export function HomePage({
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   const categories = [
-    { id: 'assignment', label: 'Assignments', icon: FileText, color: 'from-blue-500 to-blue-600' },
-    { id: 'pyq', label: 'PYQ Papers', icon: BookOpen, color: 'from-green-500 to-green-600' },
-    { id: 'lecture-notes', label: 'Lecture Notes', icon: Library, color: 'from-purple-500 to-purple-600' }
+    { id: 'assignment', label: 'Assignments', icon: FileText, color: 'from-blue-600 to-cyan-500' },
+    { id: 'pyq', label: 'PYQ Papers', icon: BookOpen, color: 'from-emerald-500 to-teal-500' },
+    { id: 'lecture-notes', label: 'Lecture Notes', icon: Library, color: 'from-violet-600 to-purple-500' }
   ];
 
   // Filter notes based on search and category
@@ -58,7 +58,7 @@ export function HomePage({
   const showPYQs = selectedCategory === 'pyq';
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-950 pb-24 lg:pb-8 lg:ml-64 mobile-page-content">
+    <div className="min-h-screen bg-transparent pb-24 lg:pb-8 lg:ml-64 mobile-page-content">
       <div className="max-w-7xl mx-auto px-4 lg:px-8 py-6">
         {/* Mobile Search Bar */}
         {onSearchChange && (
@@ -70,7 +70,7 @@ export function HomePage({
                 placeholder="Search for notes, assignments, PYQs..."
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-600 focus:border-transparent text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-slate-500"
+                className="w-full pl-12 pr-4 py-3 glass border border-gray-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-600 focus:border-transparent text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-slate-500"
               />
             </div>
           </div>
@@ -89,15 +89,16 @@ export function HomePage({
               <button
                 key={category.id}
                 onClick={() => setSelectedCategory(isSelected ? null : category.id)}
-                className={`bg-gradient-to-br ${category.color} ${isSelected ? 'ring-4 ring-offset-2 dark:ring-offset-gray-950 ring-gray-400 dark:ring-gray-600' : ''
-                  } text-white p-6 rounded-2xl hover:shadow-2xl transition-all flex items-center gap-4 shadow-lg`}
+                className={`bg-gradient-to-br ${category.color} ${isSelected ? 'ring-4 ring-offset-2 dark:ring-offset-gray-950 ring-gray-400 dark:ring-gray-600 scale-95' : 'hover:scale-105 hover:shadow-2xl'
+                  } text-white p-6 rounded-2xl transition-all duration-300 flex items-center gap-4 shadow-lg group relative overflow-hidden`}
               >
-                <div className="bg-white bg-opacity-20 p-4 rounded-xl backdrop-blur-sm">
-                  <Icon className="w-8 h-8" />
+                <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                <div className="bg-white/20 p-4 rounded-xl backdrop-blur-md shadow-inner">
+                  <Icon className="w-8 h-8 drop-shadow-md" />
                 </div>
-                <div className="text-left">
-                  <div className="text-white">{category.label}</div>
-                  <div className="text-white text-opacity-90 text-sm">
+                <div className="text-left relative z-10">
+                  <div className="text-white font-bold text-lg tracking-wide">{category.label}</div>
+                  <div className="text-white/90 text-sm font-medium">
                     {itemCount} {category.id === 'pyq' ? 'free papers' : 'items'}
                   </div>
                 </div>

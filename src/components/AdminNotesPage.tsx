@@ -1,4 +1,4 @@
-import { Star, ArrowLeft, Search, TrendingUp, CheckCircle, Trash2, ShieldCheck } from 'lucide-react';
+import { Star, ArrowLeft, Search, TrendingUp, CheckCircle, Trash2, ShieldCheck, Download } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Note } from '../types';
 import { getNotes, setNoteTopSelling, setNoteVerified, deleteNote } from '../lib/firestore';
@@ -200,6 +200,22 @@ export function AdminNotesPage({ onBack }: AdminNotesPageProps) {
                                                 >
                                                     <TrendingUp className="w-5 h-5" />
                                                 </button>
+
+                                                {/* Download Button */}
+                                                {note.pdfUrls && note.pdfUrls.length > 0 && (
+                                                    <button
+                                                        onClick={() => {
+                                                            note.pdfUrls?.forEach((url, index) => {
+                                                                setTimeout(() => window.open(url, '_blank'), index * 500);
+                                                            });
+                                                        }}
+                                                        className="p-2 rounded-lg transition-all"
+                                                        style={{ backgroundColor: '#16a34a', color: '#ffffff' }}
+                                                        title="Download PDFs"
+                                                    >
+                                                        <Download className="w-5 h-5" />
+                                                    </button>
+                                                )}
 
                                                 {/* Delete Button */}
                                                 <button

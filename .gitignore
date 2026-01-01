@@ -1,2 +1,72 @@
-node_modules
+# Dependencies
+node_modules/
+functions/node_modules/
+
+# Environment files (CRITICAL - contain API keys!)
 .env
+.env.local
+.env.*.local
+functions/.env
+
+# Build outputs
+build/
+dist/
+.cache/
+
+# Google OAuth credentials (CRITICAL - contain secrets!)
+credentials.json
+**/credentials.json
+client_secret*.json
+token.pickle
+**/token.pickle
+refresh_token.txt
+extracted_creds.json
+
+# Google Drive API folder (contains sensitive files)
+google drive api/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+
+# Token generation scripts (contain local paths)
+generate_token.py
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+*.pem
+
+# Local Netlify folder
+.netlify/
+
+# Vercel
+.vercel/
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+coverage/
+.nyc_output/

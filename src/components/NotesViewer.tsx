@@ -11,7 +11,7 @@ interface NotesViewerProps {
 export function NotesViewer({ note, onClose }: NotesViewerProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [zoom, setZoom] = useState(100);
-  
+
   // Mock PDF pages - in a real app, this would be actual PDF rendering
   const totalPages = note.previewPages.length;
 
@@ -32,8 +32,17 @@ export function NotesViewer({ note, onClose }: NotesViewerProps) {
   };
 
   const handleDownload = () => {
-    // Mock download - in real app, this would download the actual PDF
-    alert(`Downloading ${note.title}...`);
+    // Download the actual PDF files
+    if (note.pdfUrls && note.pdfUrls.length > 0) {
+      // Open each PDF in a new tab (staggered to avoid popup blocking)
+      note.pdfUrls.forEach((url, index) => {
+        setTimeout(() => {
+          window.open(url, '_blank');
+        }, index * 500);
+      });
+    } else {
+      alert('No PDF files available for download');
+    }
   };
 
   return (
@@ -80,7 +89,7 @@ export function NotesViewer({ note, onClose }: NotesViewerProps) {
             >
               <ChevronLeft className="w-5 h-5" />
             </Button>
-            
+
             <div className="flex items-center gap-2 px-4 py-2 bg-slate-800/50 rounded-lg">
               <span className="text-white">{currentPage}</span>
               <span className="text-slate-500">/</span>
@@ -109,7 +118,7 @@ export function NotesViewer({ note, onClose }: NotesViewerProps) {
             >
               <ZoomOut className="w-5 h-5" />
             </Button>
-            
+
             <div className="px-4 py-2 bg-slate-800/50 rounded-lg">
               <span className="text-white">{zoom}%</span>
             </div>
@@ -130,7 +139,7 @@ export function NotesViewer({ note, onClose }: NotesViewerProps) {
       {/* PDF Viewer Area */}
       <div className="flex-1 overflow-auto bg-slate-900 p-4 lg:p-8">
         <div className="max-w-5xl mx-auto">
-          <div 
+          <div
             className="bg-white rounded-lg shadow-2xl overflow-hidden transition-transform"
             style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center' }}
           >
@@ -141,7 +150,7 @@ export function NotesViewer({ note, onClose }: NotesViewerProps) {
                 alt={`Page ${currentPage}`}
                 className="w-full h-full object-contain"
               />
-              
+
               {/* Watermark for preview */}
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="transform -rotate-45 text-6xl font-bold text-black/5 select-none">

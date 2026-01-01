@@ -14,7 +14,7 @@ import {
     increment,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Note, UserProfile, NoteCategory, SupportChat, ChatMessage, Review, PayoutRequest, NoteRequest, FreePYQ } from '../types';
+import { Note, UserProfile, NoteCategory, SupportChat, ChatMessage, Review, PayoutRequest, NoteRequest, FreePYQ, Course } from '../types';
 
 // Collection references
 const usersCollection = collection(db, 'users');
@@ -25,6 +25,7 @@ const reviewsCollection = collection(db, 'reviews');
 const payoutsCollection = collection(db, 'payouts');
 const noteRequestsCollection = collection(db, 'noteRequests');
 const freePYQsCollection = collection(db, 'freePYQs');
+const coursesCollection = collection(db, 'courses');
 const settingsDoc = doc(db, 'settings', 'platform');
 
 // ============ USER FUNCTIONS ============
@@ -82,26 +83,43 @@ export async function getNotes(): Promise<Note[]> {
     const q = query(notesCollection, orderBy('uploadDate', 'desc'));
     const querySnapshot = await getDocs(q);
 
-    return querySnapshot.docs.map((doc) => {
-        const data = doc.data();
-        return {
-            id: doc.id,
-            title: data.title,
-            description: data.description,
-            category: data.category as NoteCategory,
-            price: data.price,
-            rating: data.rating || 0,
-            reviewCount: data.reviewCount || 0,
-            salesCount: data.salesCount || 0,
-            previewPages: data.previewPages || [],
-            thumbnailUrl: data.thumbnailUrl || '',
-            pdfUrls: data.pdfUrls || [],
-            uploaderId: data.uploaderId,
-            uploaderName: data.uploaderName,
-            uploadDate: data.uploadDate instanceof Timestamp
-                ? data.uploadDate.toDate().toISOString().split('T')[0]
-                : data.uploadDate,
-        };
+    const notes = querySnapshot.docs
+        .map((doc) => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                title: data.title,
+                description: data.description,
+                category: data.category as NoteCategory,
+                price: data.price,
+                rating: data.rating || 0,
+                reviewCount: data.reviewCount || 0,
+                salesCount: data.salesCount || 0,
+                previewPages: data.previewPages || [],
+                thumbnailUrl: data.thumbnailUrl || '',
+                pdfUrls: data.pdfUrls || [],
+                uploaderId: data.uploaderId,
+                uploaderName: data.uploaderName,
+                uploadDate: data.uploadDate instanceof Timestamp
+                    ? data.uploadDate.toDate().toISOString().split('T')[0]
+                    : data.uploadDate,
+                isDeleted: data.isDeleted || false,
+                isTopSelling: data.isTopSelling || false,
+                isVerified: data.isVerified || false,
+            };
+        })
+        .filter(note => !note.isDeleted); // Filter out soft-deleted notes
+
+    // Sort: Top Selling first, then Verified, then the rest
+    return notes.sort((a, b) => {
+        // Top selling notes come first
+        if (a.isTopSelling && !b.isTopSelling) return -1;
+        if (!a.isTopSelling && b.isTopSelling) return 1;
+        // Then verified notes
+        if (a.isVerified && !b.isVerified) return -1;
+        if (!a.isVerified && b.isVerified) return 1;
+        // Keep original order for the rest
+        return 0;
     });
 }
 
@@ -127,6 +145,9 @@ export async function getNoteById(noteId: string): Promise<Note | null> {
         uploadDate: data.uploadDate instanceof Timestamp
             ? data.uploadDate.toDate().toISOString().split('T')[0]
             : data.uploadDate,
+        isDeleted: data.isDeleted || false,
+        isTopSelling: data.isTopSelling || false,
+        isVerified: data.isVerified || false,
     };
 }
 
@@ -174,7 +195,31 @@ export async function getUserUploadedNotes(uid: string): Promise<Note[]> {
             uploadDate: data.uploadDate instanceof Timestamp
                 ? data.uploadDate.toDate().toISOString().split('T')[0]
                 : data.uploadDate,
+            isDeleted: data.isDeleted || false,
+            isTopSelling: data.isTopSelling || false,
+            isVerified: data.isVerified || false,
         };
+    });
+}
+
+// Soft delete a note (mark as deleted but keep data for existing purchasers)
+export async function softDeleteNote(noteId: string): Promise<void> {
+    await updateDoc(doc(notesCollection, noteId), {
+        isDeleted: true,
+    });
+}
+
+// Restore a soft-deleted note
+export async function restoreNote(noteId: string): Promise<void> {
+    await updateDoc(doc(notesCollection, noteId), {
+        isDeleted: false,
+    });
+}
+
+// Update note price
+export async function updateNotePrice(noteId: string, newPrice: number): Promise<void> {
+    await updateDoc(doc(notesCollection, noteId), {
+        price: newPrice,
     });
 }
 
@@ -305,23 +350,47 @@ export async function getUserPurchaseIds(uid: string): Promise<string[]> {
 // ============ REVIEWS FUNCTIONS ============
 
 export async function getReviewsForNote(noteId: string): Promise<Review[]> {
-    const q = query(reviewsCollection, where('noteId', '==', noteId), orderBy('date', 'desc'));
-    const querySnapshot = await getDocs(q);
+    try {
+        const q = query(reviewsCollection, where('noteId', '==', noteId), orderBy('date', 'desc'));
+        const querySnapshot = await getDocs(q);
 
-    return querySnapshot.docs.map((doc) => {
-        const data = doc.data();
-        return {
-            id: doc.id,
-            noteId: data.noteId,
-            userId: data.userId,
-            userName: data.userName,
-            rating: data.rating,
-            comment: data.comment,
-            date: data.date instanceof Timestamp
-                ? data.date.toDate().toISOString().split('T')[0]
-                : data.date,
-        };
-    });
+        console.log(`Found ${querySnapshot.docs.length} reviews for note ${noteId}`);
+
+        return querySnapshot.docs.map((doc) => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                noteId: data.noteId,
+                userId: data.userId,
+                userName: data.userName,
+                rating: data.rating,
+                comment: data.comment,
+                date: data.date instanceof Timestamp
+                    ? data.date.toDate().toISOString().split('T')[0]
+                    : data.date,
+            };
+        });
+    } catch (error: any) {
+        // If the composite index is missing, try without ordering
+        console.warn('Error fetching reviews, trying without order:', error.message);
+        const q = query(reviewsCollection, where('noteId', '==', noteId));
+        const querySnapshot = await getDocs(q);
+
+        return querySnapshot.docs.map((doc) => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                noteId: data.noteId,
+                userId: data.userId,
+                userName: data.userName,
+                rating: data.rating,
+                comment: data.comment,
+                date: data.date instanceof Timestamp
+                    ? data.date.toDate().toISOString().split('T')[0]
+                    : data.date,
+            };
+        });
+    }
 }
 
 export async function hasUserReviewedNote(userId: string, noteId: string): Promise<boolean> {
@@ -802,12 +871,25 @@ export async function addFreePYQ(
     courseCode: string,
     courseName: string,
     driveLink: string,
-    addedBy: string
+    addedBy: string,
+    driveFolderId?: string
 ): Promise<string> {
+    // Check if a PYQ entry for this course already exists
+    const q = query(freePYQsCollection, where('courseCode', '==', courseCode));
+    const existing = await getDocs(q);
+
+    if (!existing.empty) {
+        // Course already has a PYQ entry - just return the existing ID
+        // (The file was uploaded to the existing folder, no need to create a new DB entry)
+        return existing.docs[0].id;
+    }
+
+    // No existing entry - create a new one
     const docRef = await addDoc(freePYQsCollection, {
         courseCode,
         courseName,
         driveLink,
+        driveFolderId: driveFolderId || null,
         addedAt: Timestamp.now(),
         addedBy,
     });
@@ -825,6 +907,7 @@ export async function getFreePYQs(): Promise<FreePYQ[]> {
             courseCode: data.courseCode,
             courseName: data.courseName,
             driveLink: data.driveLink,
+            driveFolderId: data.driveFolderId || undefined,
             addedAt: data.addedAt instanceof Timestamp
                 ? data.addedAt.toDate().toISOString()
                 : data.addedAt,
@@ -835,4 +918,38 @@ export async function getFreePYQs(): Promise<FreePYQ[]> {
 
 export async function deleteFreePYQ(pyqId: string): Promise<void> {
     await deleteDoc(doc(freePYQsCollection, pyqId));
+}
+
+// ============ COURSE FUNCTIONS ============
+
+export async function getCourses(): Promise<Course[]> {
+    const querySnapshot = await getDocs(coursesCollection);
+    return querySnapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+            id: docSnap.id,
+            courseCode: data.courseCode,
+            courseName: data.courseName,
+            createdAt: data.createdAt instanceof Timestamp
+                ? data.createdAt.toDate().toISOString()
+                : data.createdAt,
+        };
+    });
+}
+
+export async function addCourse(courseCode: string, courseName: string): Promise<string> {
+    // Check if course already exists
+    const q = query(coursesCollection, where('courseCode', '==', courseCode));
+    const existing = await getDocs(q);
+
+    if (!existing.empty) {
+        return existing.docs[0].id;
+    }
+
+    const docRef = await addDoc(coursesCollection, {
+        courseCode,
+        courseName,
+        createdAt: Timestamp.now(),
+    });
+    return docRef.id;
 }

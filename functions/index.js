@@ -7,11 +7,17 @@ const crypto = require('crypto');
 admin.initializeApp();
 const db = admin.firestore();
 
-// Initialize Razorpay with environment variables
-const razorpay = new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID,
-    key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
+// Lazy initialization of Razorpay - only when actually needed
+let razorpayInstance = null;
+function getRazorpay() {
+    if (!razorpayInstance) {
+        razorpayInstance = new Razorpay({
+            key_id: process.env.RAZORPAY_KEY_ID,
+            key_secret: process.env.RAZORPAY_KEY_SECRET,
+        });
+    }
+    return razorpayInstance;
+}
 
 /**
  * Create Razorpay Order
@@ -49,7 +55,7 @@ exports.createRazorpayOrder = functions.https.onCall(async (data, context) => {
 
     try {
         // Create Razorpay order
-        const order = await razorpay.orders.create({
+        const order = await getRazorpay().orders.create({
             amount: Math.round(amount * 100), // Convert to paise
             currency: 'INR',
             receipt: `note_${noteId}_${Date.now()}`,
@@ -163,12 +169,10 @@ exports.verifyRazorpayPayment = functions.https.onCall(async (data, context) => 
         const noteData = noteDoc.data();
         const uploaderId = noteData.uploaderId;
 
-        // Calculate earning (e.g., 80% to seller, 20% platform fee)
-        const sellerEarning = orderData.amount * 0.8;
-
+        // Add full sale amount to earnings (platform fee is deducted at redemption time)
         const userRef = db.collection('users').doc(uploaderId);
         batch.update(userRef, {
-            totalEarnings: admin.firestore.FieldValue.increment(sellerEarning),
+            totalEarnings: admin.firestore.FieldValue.increment(orderData.amount),
         });
     }
 
@@ -180,4 +184,253 @@ exports.verifyRazorpayPayment = functions.https.onCall(async (data, context) => 
         message: 'Payment verified and purchase recorded',
         noteId: orderData.noteId,
     };
+});
+
+// ============ GOOGLE DRIVE INTEGRATION ============
+
+const { google } = require('googleapis');
+
+// Lazy initialization of Google Drive API
+// Lazy initialization of Google Drive API
+let driveInstance = null;
+let authClient = null;
+
+function getAuthClient() {
+    if (!authClient) {
+        const clientId = process.env.GOOGLE_CLIENT_ID;
+        const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+        const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
+
+        if (!clientId || !clientSecret || !refreshToken) {
+            console.error('Missing Google OAuth credentials in .env');
+            throw new Error('Google OAuth credentials missing');
+        }
+
+        authClient = new google.auth.OAuth2(clientId, clientSecret);
+        authClient.setCredentials({ refresh_token: refreshToken });
+    }
+    return authClient;
+}
+
+function getDrive() {
+    if (!driveInstance) {
+        const auth = getAuthClient();
+        driveInstance = google.drive({ version: 'v3', auth });
+    }
+    return driveInstance;
+}
+
+/**
+ * Upload PYQ to Google Drive
+ * Called after user uploads PYQ to Firebase Storage
+ */
+exports.uploadPYQToDrive = functions.https.onCall(async (data, context) => {
+    // Verify user is authenticated
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in to upload PYQ');
+    }
+
+    const { storagePath, courseCode, courseName, fileName } = data;
+    const userId = context.auth.uid;
+
+    // Validate input
+    if (!storagePath || !courseCode || !courseName || !fileName) {
+        throw new functions.https.HttpsError('invalid-argument', 'Storage path, course code, course name, and file name are required');
+    }
+
+    const drive = getDrive();
+    // Optional parent folder, default to root if not set
+    const parentFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+
+    try {
+        // 1. Find or create the course folder
+        const folderName = `${courseCode} ${courseName}`;
+        let courseFolderId;
+
+        // Search Query: Match test.py logic (search by name, not trashed, is folder)
+        // If parentFolderId is set, restrict search to it. Otherwise search valid locations.
+        let query = `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+        if (parentFolderId) {
+            query += ` and '${parentFolderId}' in parents`;
+        }
+
+        const folderSearch = await drive.files.list({
+            q: query,
+            fields: 'files(id, name)',
+            supportsAllDrives: true,
+            includeItemsFromAllDrives: true,
+        });
+
+        if (folderSearch.data.files && folderSearch.data.files.length > 0) {
+            // Folder exists
+            courseFolderId = folderSearch.data.files[0].id;
+            console.log(`Found existing folder: ${folderName} (${courseFolderId})`);
+        } else {
+            // Create new folder
+            const folderMetadata = {
+                name: folderName,
+                mimeType: 'application/vnd.google-apps.folder',
+            };
+
+            if (parentFolderId) {
+                folderMetadata.parents = [parentFolderId];
+            }
+
+            const folder = await drive.files.create({
+                requestBody: folderMetadata,
+                fields: 'id',
+                supportsAllDrives: true,
+            });
+            courseFolderId = folder.data.id;
+            console.log(`Created new folder: ${folderName} (${courseFolderId})`);
+        }
+
+        // 2. Download file from Firebase Storage
+        const bucket = admin.storage().bucket();
+        const file = bucket.file(storagePath);
+        const [fileBuffer] = await file.download();
+        console.log(`Downloaded file from Storage: ${storagePath}`);
+
+        // 3. Upload to Google Drive
+        const { Readable } = require('stream');
+        const fileStream = Readable.from(fileBuffer);
+
+        const fileMetadata = {
+            name: fileName,
+            parents: [courseFolderId],
+        };
+
+        const media = {
+            mimeType: 'application/pdf',
+            body: fileStream,
+        };
+
+        const driveFile = await drive.files.create({
+            requestBody: fileMetadata,
+            media: media,
+            fields: 'id, webViewLink',
+            supportsAllDrives: true,
+        });
+
+        console.log(`Uploaded to Drive: ${driveFile.data.id}`);
+
+        // 4. Make the file viewable by anyone with the link
+        await drive.permissions.create({
+            fileId: driveFile.data.id,
+            requestBody: {
+                role: 'reader',
+                type: 'anyone',
+            },
+        });
+
+        // 5. Delete from Firebase Storage
+        await file.delete();
+        console.log(`Deleted from Storage: ${storagePath}`);
+
+        // 6. Store PYQ record in Firestore
+        await db.collection('freePYQs').add({
+            courseCode,
+            courseName,
+            fileName,
+            driveLink: driveFile.data.webViewLink,
+            driveFileId: driveFile.data.id,
+            addedBy: userId,
+            addedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        return {
+            success: true,
+            driveLink: driveFile.data.webViewLink,
+            driveFileId: driveFile.data.id,
+        };
+    } catch (error) {
+        console.error('Error uploading PYQ to Drive:', error);
+        throw new functions.https.HttpsError('internal', 'Failed to upload PYQ to Google Drive: ' + error.message);
+    }
+});
+
+/**
+ * Get list of courses from freePYQs collection
+ */
+exports.getCourses = functions.https.onCall(async (data, context) => {
+    try {
+        const snapshot = await db.collection('courses').get();
+        const courses = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+        }));
+        return { courses };
+    } catch (error) {
+        console.error('Error getting courses:', error);
+        throw new functions.https.HttpsError('internal', 'Failed to get courses');
+    }
+});
+
+/**
+ * Add a new course
+ */
+exports.addCourse = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in');
+    }
+
+    const { courseCode, courseName } = data;
+
+    if (!courseCode || !courseName) {
+        throw new functions.https.HttpsError('invalid-argument', 'Course code and name are required');
+    }
+
+    try {
+        // Check if course already exists
+        const existing = await db.collection('courses')
+            .where('courseCode', '==', courseCode)
+            .get();
+
+        if (!existing.empty) {
+            return { success: true, message: 'Course already exists', courseId: existing.docs[0].id };
+        }
+
+        const docRef = await db.collection('courses').add({
+            courseCode,
+            courseName,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        return { success: true, courseId: docRef.id };
+    } catch (error) {
+        console.error('Error adding course:', error);
+        throw new functions.https.HttpsError('internal', 'Failed to add course');
+    }
+});
+
+/**
+ * Get Google Drive Access Token for Frontend Upload
+ * Returns a temporary access token so frontend can upload directly to Drive
+ */
+exports.getDriveAccessToken = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in');
+    }
+
+    try {
+        const auth = getAuthClient();
+        const tokenResponse = await auth.getAccessToken();
+
+        // tokenResponse can be just the token string or an object { token, res } depending on version
+        // Using getAccessToken() typically returns { token: '...', res: ... } or just resolves token.
+        // Actually GoogleAuth.getAccessToken() returns string. 
+        // OAuth2.getAccessToken() returns { token, res: { data: { expiry_date, ... } } }
+
+        return {
+            accessToken: tokenResponse.token || tokenResponse,
+            // Check if we have expiry info, otherwise default to 1 hour
+            expiresAt: (tokenResponse.res && tokenResponse.res.data && tokenResponse.res.data.expiry_date)
+                ? tokenResponse.res.data.expiry_date
+                : (Date.now() + 3500 * 1000),
+            parentFolderId: process.env.GOOGLE_DRIVE_FOLDER_ID,
+        };
+    } catch (error) {
+        console.error('Error getting access token:', error);
+        throw new functions.https.HttpsError('internal', 'Failed to get access token: ' + error.message);
+    }
 });

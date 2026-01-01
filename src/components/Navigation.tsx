@@ -96,8 +96,7 @@ export function Navigation({ currentPage, onNavigate, onLoginRequest }: Navigati
   return (
     <>
       {/* Desktop Sidebar Navigation */}
-      <aside className="hidden lg:flex flex-col fixed left-0 top-0 h-screen w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 z-50 isolate" style={{ backgroundColor: 'var(--sidebar-bg, #ffffff)' }}>
-        <style>{`.dark aside { --sidebar-bg: #0f172a !important; }`}</style>
+      <aside className="hidden lg:flex flex-col fixed left-0 top-0 h-screen w-64 glass border-r border-gray-200 dark:border-gray-700 z-50 isolate">
         {/* Logo */}
         <div className="p-6 border-b border-gray-200 dark:border-slate-700">
           <div className="flex items-center gap-3">
@@ -116,13 +115,14 @@ export function Navigation({ currentPage, onNavigate, onLoginRequest }: Navigati
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentPage === item.id;
+            const isUpload = item.id === 'upload';
 
             return (
               <button
                 key={item.id}
                 onClick={() => onNavigate(item.id)}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${isActive
-                  ? 'text-white shadow-lg'
+                  ? 'text-white shadow-lg scale-[1.02]'
                   : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800'
                   }`}
                 style={isActive ? { backgroundColor: isAdmin ? '#db2777' : '#2563eb' } : {}}
@@ -173,7 +173,8 @@ export function Navigation({ currentPage, onNavigate, onLoginRequest }: Navigati
       </aside>
 
       {/* Mobile Header */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700">
+      {/* Mobile Header */}
+      <header className="lg:hidden fixed top-0 left-0 right-0 z-50 glass border-b border-gray-200 dark:border-slate-700">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
             <div className={`w-8 h-8 ${isAdmin ? 'bg-gradient-to-br from-purple-600 to-pink-600' : 'bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500'} rounded-lg flex items-center justify-center`}>
@@ -221,7 +222,7 @@ export function Navigation({ currentPage, onNavigate, onLoginRequest }: Navigati
 
       {/* Mobile Hamburger Menu Dropdown */}
       {mobileMenuOpen && mobileMenuItems.length > 0 && (
-        <div className="lg:hidden fixed left-0 right-0 z-40 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 shadow-lg" style={{ top: '56px' }}>
+        <div className="lg:hidden fixed left-0 right-0 z-40 glass border-b border-gray-200 dark:border-slate-700 shadow-lg" style={{ top: '56px' }}>
           <nav className="p-2">
             {mobileMenuItems.map((item) => {
               const Icon = item.icon;
@@ -249,7 +250,7 @@ export function Navigation({ currentPage, onNavigate, onLoginRequest }: Navigati
       )}
 
       {/* Mobile Bottom Navigation */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-slate-900 border-t border-gray-200 dark:border-slate-700">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 glass border-t border-gray-200 dark:border-slate-700">
         <div className="flex justify-around items-center h-16">
           {mobileBottomItems.map((item) => {
             const Icon = item.icon;

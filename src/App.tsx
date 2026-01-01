@@ -204,8 +204,13 @@ function AppContent() {
         const result = await initiatePayment(noteId, note.price, note.title);
 
         if (result.success) {
-          // Payment successful - Cloud Function already recorded purchase
-          setPurchasedNotes([...purchasedNotes, note]);
+          // Payment successful - fetch fresh note data from Firestore to ensure we have pdfUrls
+          const freshNote = await getNoteById(noteId);
+          if (freshNote) {
+            setPurchasedNotes([...purchasedNotes, freshNote]);
+          } else {
+            setPurchasedNotes([...purchasedNotes, note]);
+          }
           setPurchasedIds([...purchasedIds, noteId]);
           alert(`Successfully purchased "${note.title}"!`);
         } else if (result.error && result.error !== 'Payment cancelled') {
@@ -307,7 +312,7 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="min-h-screen bg-transparent text-slate-900 dark:text-slate-100 transition-colors duration-300">
       <Navigation
         currentPage={currentPage}
         onNavigate={setCurrentPage}
@@ -320,6 +325,7 @@ function AppContent() {
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           showSearch={showSearch}
+          onNavigate={setCurrentPage}
         />
       </div>
 
@@ -446,6 +452,7 @@ function AppContent() {
         <NotePreviewModal
           note={previewNote}
           onClose={() => setPreviewNote(null)}
+          onPurchase={handlePurchase}
         />
       )}
 

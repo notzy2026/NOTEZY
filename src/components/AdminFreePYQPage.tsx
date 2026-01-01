@@ -1,8 +1,10 @@
-import { BookOpen, ArrowLeft, Plus, Trash2, ExternalLink, Link } from 'lucide-react';
+
+import { BookOpen, ArrowLeft, Plus, Trash2, ExternalLink, File, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { FreePYQ } from '../types';
-import { getFreePYQs, addFreePYQ, deleteFreePYQ } from '../lib/firestore';
+import { getFreePYQs, deleteFreePYQ, addFreePYQ } from '../lib/firestore';
 import { useAuth } from '../contexts/AuthContext';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 interface AdminFreePYQPageProps {
     onBack: () => void;
@@ -14,9 +16,12 @@ export function AdminFreePYQPage({ onBack }: AdminFreePYQPageProps) {
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState('');
+
+    // Form State
     const [courseCode, setCourseCode] = useState('');
     const [courseName, setCourseName] = useState('');
-    const [driveLink, setDriveLink] = useState('');
+    const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
     useEffect(() => {
         loadPYQs();
@@ -33,38 +38,190 @@ export function AdminFreePYQPage({ onBack }: AdminFreePYQPageProps) {
         }
     }
 
+    // --- Direct Drive Upload Logic ---
+
+    async function getAccessToken(): Promise<{ accessToken: string; parentFolderId?: string }> {
+        const functions = getFunctions();
+        const getDriveAccessToken = httpsCallable(functions, 'getDriveAccessToken');
+        const result = await getDriveAccessToken();
+        return result.data as any;
+    }
+
+    async function searchOrCreateFolder(token: string, parentId: string | undefined, name: string): Promise<{ id: string, webViewLink: string }> {
+        // 1. Search for existing folder
+        let query = `name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+        if (parentId) {
+            query += ` and '${parentId}' in parents`;
+        }
+
+        const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,webViewLink)`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        const searchData = await searchRes.json();
+
+        if (searchData.files && searchData.files.length > 0) {
+            // Folder exists - return it
+            return { id: searchData.files[0].id, webViewLink: searchData.files[0].webViewLink };
+        }
+
+        // 2. Create new folder
+        const metadata: any = {
+            name: name,
+            mimeType: 'application/vnd.google-apps.folder',
+        };
+        if (parentId) {
+            metadata.parents = [parentId];
+        }
+
+        const createRes = await fetch('https://www.googleapis.com/drive/v3/files?fields=id,webViewLink', {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(metadata)
+        });
+        const createData = await createRes.json();
+
+        if (createData.error) throw new Error(createData.error.message);
+        return { id: createData.id, webViewLink: createData.webViewLink };
+    }
+
+    async function uploadFileToDrive(token: string, folderId: string, file: File): Promise<{ id: string }> {
+        const metadata = {
+            name: file.name,
+            parents: [folderId]
+        };
+
+        const form = new FormData();
+        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+        form.append('file', file);
+
+        // Uses multipart upload
+        const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: form
+        });
+        const data = await res.json();
+
+        if (data.error) throw new Error(data.error.message);
+        return data; // { id }
+    }
+
+    async function makeFolderPublic(token: string, folderId: string) {
+        // Make the FOLDER publicly viewable (all files inside inherit this)
+        await fetch(`https://www.googleapis.com/drive/v3/files/${folderId}/permissions`, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                role: 'reader',
+                type: 'anyone'
+            })
+        });
+    }
+
+    // --- End Direct Drive Upload Logic ---
+
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
-        if (!courseCode.trim() || !courseName.trim() || !driveLink.trim()) return;
+        if (!courseCode.trim() || !courseName.trim() || selectedFiles.length === 0) return;
 
         setSubmitting(true);
+        setUploadProgress('Initializing...');
+
         try {
+            // 1. Get Access Token from Backend (securely using stored refresh token)
+            setUploadProgress('Authenticating...');
+            const { accessToken, parentFolderId } = await getAccessToken();
+
+            // 2. Find or Create Folder
+            setUploadProgress('Organizing folders...');
+            const folderName = `${courseCode.trim().toUpperCase()} ${courseName.trim()}`;
+            const { id: folderId, webViewLink: folderLink } = await searchOrCreateFolder(accessToken, parentFolderId, folderName);
+
+            // 3. Make folder public (so all files inside are accessible)
+            setUploadProgress('Setting folder permissions...');
+            await makeFolderPublic(accessToken, folderId);
+
+            // 4. Upload ALL files to the folder
+            for (let i = 0; i < selectedFiles.length; i++) {
+                setUploadProgress(`Uploading file ${i + 1} of ${selectedFiles.length}...`);
+                await uploadFileToDrive(accessToken, folderId, selectedFiles[i]);
+            }
+
+            // 5. Save to Database (using FOLDER link, not file link)
+            setUploadProgress('Saving to database...');
             await addFreePYQ(
-                courseCode.trim(),
+                courseCode.trim().toUpperCase(),
                 courseName.trim(),
-                driveLink.trim(),
-                userProfile?.name || 'Admin'
+                folderLink, // This is the FOLDER link, not the file link
+                userProfile?.name || 'Admin',
+                folderId, // Store folder ID for deletion later
             );
+
+            // 6. Refresh List
             await loadPYQs();
+
+            // Reset
             setCourseCode('');
             setCourseName('');
-            setDriveLink('');
+            setSelectedFiles([]);
             setShowForm(false);
-        } catch (error) {
+            setUploadProgress('');
+            alert(`${selectedFiles.length} file(s) uploaded successfully!`);
+
+        } catch (error: any) {
             console.error('Error adding PYQ:', error);
-            alert('Failed to add PYQ');
+            alert(`Failed to add PYQ: ${error.message || 'Unknown error'}`);
         } finally {
             setSubmitting(false);
+            setUploadProgress('');
         }
     }
 
-    async function handleDelete(pyqId: string) {
+    async function deleteFolderFromDrive(token: string, folderId: string) {
+        // Delete the folder and all its contents from Google Drive
+        console.log('Attempting to delete Drive folder:', folderId);
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${folderId}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (!res.ok) {
+            const error = await res.json().catch(() => ({}));
+            console.error('Drive delete failed:', res.status, error);
+            throw new Error(error.error?.message || `Drive delete failed with status ${res.status}`);
+        }
+        console.log('Drive folder deleted successfully');
+    }
+
+    async function handleDelete(pyqId: string, driveFolderId?: string) {
+        console.log('handleDelete called with:', { pyqId, driveFolderId });
+
+        if (!confirm('Are you sure you want to delete this PYQ? This will also delete the folder and all files from Google Drive!')) return;
         try {
+            // Delete from Google Drive first (if we have the folder ID)
+            if (driveFolderId) {
+                console.log('Folder ID found, getting access token...');
+                const { accessToken } = await getAccessToken();
+                console.log('Got access token, deleting folder...');
+                await deleteFolderFromDrive(accessToken, driveFolderId);
+            } else {
+                console.warn('No driveFolderId stored for this PYQ - cannot delete from Drive');
+                alert('Note: This PYQ was created before folder tracking was added. The Drive folder will NOT be deleted automatically. Please delete it manually from Google Drive.');
+            }
+
+            // Then delete from database
             await deleteFreePYQ(pyqId);
             setPyqs(prev => prev.filter(p => p.id !== pyqId));
-        } catch (error) {
+            alert(driveFolderId ? 'PYQ and Drive folder deleted successfully!' : 'PYQ removed from database (Drive folder not deleted).');
+        } catch (error: any) {
             console.error('Error deleting PYQ:', error);
-            alert('Failed to delete PYQ');
+            alert(`Failed to delete PYQ: ${error.message || 'Unknown error'}`);
         }
     }
 
@@ -116,7 +273,7 @@ export function AdminFreePYQPage({ onBack }: AdminFreePYQPageProps) {
                                     <input
                                         type="text"
                                         value={courseCode}
-                                        onChange={(e) => setCourseCode(e.target.value)}
+                                        onChange={(e) => setCourseCode(e.target.value.toUpperCase())}
                                         placeholder="e.g., CS101"
                                         className="w-full px-4 py-3 bg-gray-100 dark:bg-gray-800 border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 dark:text-white"
                                         required
@@ -134,35 +291,74 @@ export function AdminFreePYQPage({ onBack }: AdminFreePYQPageProps) {
                                     />
                                 </div>
                             </div>
+
+                            {/* File Upload */}
                             <div>
                                 <label className="block text-sm text-gray-700 dark:text-gray-300 mb-2">
-                                    <Link className="w-4 h-4 inline mr-1" />
-                                    Google Drive Link
+                                    <File className="w-4 h-4 inline mr-1" />
+                                    PDF Files (Multiple)
                                 </label>
-                                <input
-                                    type="url"
-                                    value={driveLink}
-                                    onChange={(e) => setDriveLink(e.target.value)}
-                                    placeholder="https://drive.google.com/..."
-                                    className="w-full px-4 py-3 bg-gray-100 dark:bg-gray-800 border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 dark:text-white"
-                                    required
-                                />
+                                <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-6 text-center hover:border-green-500 transition-colors">
+                                    <input
+                                        type="file"
+                                        accept=".pdf,application/pdf"
+                                        multiple
+                                        onChange={(e) => {
+                                            if (e.target.files && e.target.files.length > 0) {
+                                                setSelectedFiles(Array.from(e.target.files));
+                                            }
+                                        }}
+                                        className="hidden"
+                                        id="pyq-file-upload"
+                                        required
+                                    />
+                                    <label htmlFor="pyq-file-upload" className="cursor-pointer block w-full h-full">
+                                        {selectedFiles.length > 0 ? (
+                                            <div className="text-green-600 dark:text-green-400">
+                                                <File className="w-8 h-8 mx-auto mb-2" />
+                                                <span className="font-medium">{selectedFiles.length} file(s) selected</span>
+                                                <div className="text-sm text-gray-500 mt-1">
+                                                    {selectedFiles.map(f => f.name).join(', ')}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="text-gray-500 dark:text-gray-400">
+                                                <Plus className="w-8 h-8 mx-auto mb-2" />
+                                                <p>Click to select PDF files (multiple allowed)</p>
+                                            </div>
+                                        )}
+                                    </label>
+                                </div>
                             </div>
-                            <div className="flex gap-3 justify-end">
+
+                            <div className="flex gap-3 justify-end items-center">
+                                {submitting && (
+                                    <div className="text-sm text-gray-500 animate-pulse">
+                                        {uploadProgress}
+                                    </div>
+                                )}
                                 <button
                                     type="button"
                                     onClick={() => setShowForm(false)}
                                     className="px-4 py-2 bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-700"
+                                    disabled={submitting}
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={submitting}
-                                    className="px-4 py-2 text-white rounded-xl hover:opacity-90 disabled:opacity-50"
+                                    className="px-4 py-2 text-white rounded-xl hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
                                     style={{ backgroundColor: '#16a34a' }}
                                 >
-                                    {submitting ? 'Adding...' : 'Add PYQ'}
+                                    {submitting ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            Processing...
+                                        </>
+                                    ) : (
+                                        'Upload & Add'
+                                    )}
                                 </button>
                             </div>
                         </form>
@@ -210,8 +406,9 @@ export function AdminFreePYQPage({ onBack }: AdminFreePYQPageProps) {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <button
-                                                    onClick={() => handleDelete(pyq.id)}
+                                                    onClick={() => handleDelete(pyq.id, pyq.driveFolderId)}
                                                     className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                                    title="Delete PYQ and Drive folder"
                                                 >
                                                     <Trash2 className="w-5 h-5" />
                                                 </button>

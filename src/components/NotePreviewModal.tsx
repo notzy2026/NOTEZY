@@ -1,4 +1,4 @@
-import { X, Star, ChevronLeft, ChevronRight, User } from 'lucide-react';
+import { X, Star, ChevronLeft, ChevronRight, User, Download, File, ShoppingCart } from 'lucide-react';
 import { Note, Review } from '../types';
 import { useState, useEffect } from 'react';
 import { getReviewsForNote, hasUserReviewedNote, addReview, isNotePurchased } from '../lib/firestore';
@@ -7,9 +7,10 @@ import { useAuth } from '../contexts/AuthContext';
 interface NotePreviewModalProps {
   note: Note;
   onClose: () => void;
+  onPurchase?: (noteId: string) => void;
 }
 
-export function NotePreviewModal({ note, onClose }: NotePreviewModalProps) {
+export function NotePreviewModal({ note, onClose, onPurchase }: NotePreviewModalProps) {
   const { user, userProfile } = useAuth();
   const [currentPage, setCurrentPage] = useState(0);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -111,7 +112,7 @@ export function NotePreviewModal({ note, onClose }: NotePreviewModalProps) {
               <img
                 src={note.previewPages[currentPage]}
                 alt={`Page ${currentPage + 1}`}
-                className="w-full h-auto"
+                className="w-full h-auto lg:w-auto lg:h-full lg:max-h-[70vh] lg:mx-auto object-contain"
               />
 
               {note.previewPages.length > 1 && (
@@ -138,6 +139,19 @@ export function NotePreviewModal({ note, onClose }: NotePreviewModalProps) {
                 </>
               )}
             </div>
+
+            {/* Purchase Button - Visible if not purchased */}
+            {!hasPurchased && onPurchase && (
+              <div className="mb-6 flex justify-center">
+                <button
+                  onClick={() => onPurchase(note.id)}
+                  className="w-full md:w-auto min-w-[200px] bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white py-3 px-6 rounded-xl text-lg font-semibold hover:shadow-lg transition-all hover:-translate-y-0.5 flex items-center justify-center gap-2 animate-pulse"
+                >
+                  <ShoppingCart className="w-5 h-5" />
+                  Purchase for ₹{note.price}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Description */}
@@ -181,6 +195,44 @@ export function NotePreviewModal({ note, onClose }: NotePreviewModalProps) {
               </div>
             </div>
           </div>
+
+          {/* Download Section - Only for admins and purchasers */}
+          {(userProfile?.isAdmin || hasPurchased) && note.pdfUrls && note.pdfUrls.length > 0 && (
+            <div className="mb-6 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 p-5 rounded-2xl border border-green-200 dark:border-green-800">
+              <div className="flex items-center gap-2 mb-4">
+                <Download className="w-5 h-5 text-green-600 dark:text-green-400" />
+                <h3 className="text-gray-900 dark:text-white">
+                  Download PDF{note.pdfUrls.length > 1 ? 's' : ''}
+                  {userProfile?.isAdmin && !hasPurchased && (
+                    <span className="ml-2 text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 px-2 py-0.5 rounded-lg">Admin Access</span>
+                  )}
+                </h3>
+              </div>
+              <div className="space-y-2">
+                {note.pdfUrls.map((url, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+                  >
+                    <div className="flex items-center gap-3">
+                      <File className="w-5 h-5 text-red-500" />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">
+                        {note.title} - File {index + 1}.pdf
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => window.open(url, '_blank')}
+                      className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg transition-colors shadow-md"
+                      style={{ backgroundColor: '#16a34a', color: '#ffffff' }}
+                    >
+                      <Download className="w-4 h-4" />
+                      Download
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Reviews Section */}
           <div>

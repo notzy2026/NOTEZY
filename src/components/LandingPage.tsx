@@ -46,9 +46,9 @@ export function LandingPage({ onNavigateToLogin, onNavigateToSignup }: LandingPa
   ];
 
   return (
-    <div className="min-h-screen bg-white dark:bg-slate-950">
+    <div className="min-h-screen bg-transparent text-slate-900 dark:text-slate-100">
       {/* Navigation */}
-      <nav className="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-gray-200 dark:border-slate-800">
+      <nav className="sticky top-0 z-50 glass border-b border-gray-200 dark:border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
@@ -200,7 +200,7 @@ export function LandingPage({ onNavigateToLogin, onNavigateToSignup }: LandingPa
       </section>
 
       {/* Features Section */}
-      <section id="features" className="py-20 bg-gray-50 dark:bg-slate-900/50">
+      <section id="features" className="py-20 bg-transparent">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl text-gray-900 dark:text-white mb-4">What We Offer</h2>
@@ -215,7 +215,7 @@ export function LandingPage({ onNavigateToLogin, onNavigateToSignup }: LandingPa
               return (
                 <div
                   key={index}
-                  className="bg-white dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl p-6 hover:border-purple-500/50 transition-all group hover:shadow-lg"
+                  className="glass border border-gray-200 dark:border-slate-700 rounded-xl p-6 hover:border-purple-500/50 transition-all group hover:shadow-lg"
                 >
                   <div className="w-12 h-12 bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-pink-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                     <Icon className="w-6 h-6 text-purple-600 dark:text-purple-400" />
@@ -230,9 +230,9 @@ export function LandingPage({ onNavigateToLogin, onNavigateToSignup }: LandingPa
       </section>
 
       {/* About Us Section */}
-      <section id="about" className="py-20 bg-white dark:bg-slate-950">
+      <section id="about" className="py-20 bg-transparent">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="bg-white dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-2xl p-8 lg:p-12 shadow-lg">
+          <div className="glass border border-gray-200 dark:border-slate-700 rounded-2xl p-8 lg:p-12 shadow-lg">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
                 <GraduationCap className="w-6 h-6 text-white" />
@@ -261,11 +261,11 @@ export function LandingPage({ onNavigateToLogin, onNavigateToSignup }: LandingPa
       </section>
 
       {/* Privacy & Policies Section */}
-      <section className="py-20 bg-gray-50 dark:bg-slate-900/50">
+      <section className="py-20 bg-transparent">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Privacy Policy */}
-            <div className="bg-white dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl p-8 shadow-sm">
+            <div className="glass border border-gray-200 dark:border-slate-700 rounded-xl p-8 shadow-sm">
               <div className="flex items-center gap-3 mb-4">
                 <Shield className="w-8 h-8 text-green-600 dark:text-green-400" />
                 <h3 className="text-xl text-gray-900 dark:text-white">Privacy Policy</h3>
@@ -294,7 +294,7 @@ export function LandingPage({ onNavigateToLogin, onNavigateToSignup }: LandingPa
             </div>
 
             {/* Terms and Conditions */}
-            <div className="bg-white dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl p-8 shadow-sm">
+            <div className="glass border border-gray-200 dark:border-slate-700 rounded-xl p-8 shadow-sm">
               <div className="flex items-center gap-3 mb-4">
                 <FileCheck className="w-8 h-8 text-blue-600 dark:text-blue-400" />
                 <h3 className="text-xl text-gray-900 dark:text-white">Terms & Conditions</h3>
@@ -323,7 +323,7 @@ export function LandingPage({ onNavigateToLogin, onNavigateToSignup }: LandingPa
             </div>
 
             {/* Refund & Cancellation */}
-            <div className="bg-white dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl p-8 shadow-sm">
+            <div className="glass border border-gray-200 dark:border-slate-700 rounded-xl p-8 shadow-sm">
               <div className="flex items-center gap-3 mb-4">
                 <FileText className="w-8 h-8 text-red-600 dark:text-red-400" />
                 <h3 className="text-xl text-gray-900 dark:text-white">Refund & Cancellation</h3>
@@ -344,7 +344,7 @@ export function LandingPage({ onNavigateToLogin, onNavigateToSignup }: LandingPa
             </div>
 
             {/* Shipping & Delivery */}
-            <div className="bg-white dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-xl p-8 shadow-sm">
+            <div className="glass border border-gray-200 dark:border-slate-700 rounded-xl p-8 shadow-sm">
               <div className="flex items-center gap-3 mb-4">
                 <Truck className="w-8 h-8 text-purple-600 dark:text-purple-400" />
                 <h3 className="text-xl text-gray-900 dark:text-white">Shipping & Delivery</h3>
@@ -376,9 +376,9 @@ export function LandingPage({ onNavigateToLogin, onNavigateToSignup }: LandingPa
       </section>
 
       {/* Contact Section */}
-      <section id="contact" className="py-20 bg-white dark:bg-slate-950">
+      <section id="contact" className="py-20 bg-transparent">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="bg-gradient-to-br from-gray-50 to-white dark:from-slate-800/50 dark:to-slate-800/30 border border-gray-200 dark:border-slate-700 rounded-2xl p-8 lg:p-12 text-center shadow-lg">
+          <div className="glass border border-gray-200 dark:border-slate-700 rounded-2xl p-8 lg:p-12 text-center shadow-lg">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 rounded-2xl mb-6">
               <Mail className="w-8 h-8 text-white" />
             </div>
@@ -403,7 +403,7 @@ export function LandingPage({ onNavigateToLogin, onNavigateToSignup }: LandingPa
       </section>
 
       {/* Footer */}
-      <footer className="bg-gray-100 dark:bg-slate-900 border-t border-gray-200 dark:border-slate-800 py-12">
+      <footer className="glass border-t border-gray-200 dark:border-slate-800 py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center gap-2">

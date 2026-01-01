@@ -179,7 +179,7 @@ export function AdminPayoutsPage({ onBack }: AdminPayoutsPageProps) {
                                         <th className="px-6 py-4 text-left text-sm text-gray-600 dark:text-gray-400">Fee</th>
                                         <th className="px-6 py-4 text-left text-sm text-gray-600 dark:text-gray-400">Net Amount</th>
                                         <th className="px-6 py-4 text-left text-sm text-gray-600 dark:text-gray-400">Status</th>
-                                        <th className="px-6 py-4 text-left text-sm text-gray-600 dark:text-gray-400">Action</th>
+                                        <th className="px-6 py-4 text-left text-sm text-gray-600 dark:text-gray-400 min-w-[140px]">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
@@ -225,7 +225,8 @@ export function AdminPayoutsPage({ onBack }: AdminPayoutsPageProps) {
                                                     <button
                                                         onClick={() => handleMarkComplete(payout.id)}
                                                         disabled={processingId === payout.id}
-                                                        className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                                                        className="px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2 shadow-md whitespace-nowrap"
+                                                        style={{ backgroundColor: '#16a34a', color: '#ffffff' }}
                                                     >
                                                         {processingId === payout.id ? (
                                                             <>Processing...</>

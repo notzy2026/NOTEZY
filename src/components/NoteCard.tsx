@@ -1,5 +1,5 @@
 import { Note } from '../types';
-import { Star, ShoppingCart, Bookmark, Eye, FileText } from 'lucide-react';
+import { Star, ShoppingCart, Bookmark, Eye, FileText, TrendingUp, ShieldCheck } from 'lucide-react';
 
 interface NoteCardProps {
   note: Note;
@@ -21,7 +21,7 @@ export function NoteCard({
   isPurchased = false
 }: NoteCardProps) {
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl overflow-hidden shadow-md hover:shadow-2xl transition-all border border-gray-200 dark:border-slate-800 group">
+    <div className="glass rounded-2xl overflow-hidden shadow-md hover:shadow-2xl transition-all border border-gray-200 dark:border-slate-800 group">
       <div
         className="relative h-48 bg-gray-200 dark:bg-slate-800 cursor-pointer overflow-hidden"
         onClick={() => onPreview(note)}
@@ -34,6 +34,23 @@ export function NoteCard({
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/0 to-black/0 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
           <Eye className="w-12 h-12 text-white transform translate-y-4 group-hover:translate-y-0 transition-transform" />
         </div>
+
+        {/* Status badges - Top Left */}
+        <div className="absolute top-3 left-3 flex flex-col gap-1">
+          {note.isTopSelling && (
+            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg shadow-lg" style={{ backgroundColor: '#f59e0b', color: '#ffffff' }}>
+              <TrendingUp className="w-3 h-3" />
+              Top Selling
+            </span>
+          )}
+          {note.isVerified && (
+            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg shadow-lg" style={{ backgroundColor: '#16a34a', color: '#ffffff' }}>
+              <ShieldCheck className="w-3 h-3" />
+              Verified
+            </span>
+          )}
+        </div>
+
         <div className="absolute top-3 right-3">
           {onBookmark && (
             <button
@@ -42,8 +59,8 @@ export function NoteCard({
                 onBookmark(note.id);
               }}
               className={`p-2.5 rounded-xl ${isBookmarked
-                  ? 'bg-yellow-500 text-white shadow-lg'
-                  : 'bg-white/90 dark:bg-slate-900/90 text-gray-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-900 backdrop-blur-sm'
+                ? 'bg-yellow-500 text-white shadow-lg'
+                : 'bg-white/90 dark:bg-slate-900/90 text-gray-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-900 backdrop-blur-sm'
                 } transition-all`}
             >
               <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />

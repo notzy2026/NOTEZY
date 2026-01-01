@@ -89,7 +89,8 @@ export function DownloadsPage({ purchasedNotes }: DownloadsPageProps) {
                           {note.pdfUrls.length > 1 && (
                             <button
                               onClick={() => handleDownloadAll(note)}
-                              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-sm rounded-lg hover:shadow-lg transition-all"
+                              className="flex items-center gap-2 px-4 py-2 text-sm rounded-lg hover:shadow-lg transition-all shadow-md"
+                              style={{ background: 'linear-gradient(to right, #2563eb, #9333ea)', color: '#ffffff' }}
                             >
                               <Download className="w-4 h-4" />
                               Download All
@@ -110,7 +111,8 @@ export function DownloadsPage({ purchasedNotes }: DownloadsPageProps) {
                               </div>
                               <button
                                 onClick={() => handleDownload(url, `${note.title}_${index + 1}.pdf`)}
-                                className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors"
+                                className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg transition-colors shadow-md"
+                                style={{ backgroundColor: '#2563eb', color: '#ffffff' }}
                               >
                                 <Download className="w-4 h-4" />
                                 Download
