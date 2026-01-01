@@ -52,8 +52,22 @@ export function HomePage({
     pyq.courseName.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Top purchased notes (sorted by sales count)
-  const topNotes = [...notes].sort((a, b) => b.salesCount - a.salesCount).slice(0, 8);
+  // Top purchased notes: Admin-marked "Top Selling" first, then by sales count
+  const topNotes = [...notes]
+    .sort((a, b) => {
+      // Top Selling notes (marked by admin) come first
+      if (a.isTopSelling && !b.isTopSelling) return -1;
+      if (!a.isTopSelling && b.isTopSelling) return 1;
+      // Then sort by sales count
+      return b.salesCount - a.salesCount;
+    })
+    .slice(0, 8);
+
+  // Determine if we're actively searching
+  const isSearching = searchQuery.trim().length > 0;
+
+  // Notes to display: filtered if searching or category selected, otherwise top notes
+  const displayNotes = (isSearching || selectedCategory) ? filteredNotes : topNotes;
 
   const showPYQs = selectedCategory === 'pyq';
 
@@ -110,9 +124,11 @@ export function HomePage({
         {/* Content Section */}
         <div>
           <h2 className="text-gray-900 dark:text-white mb-6">
-            {selectedCategory
-              ? `${categories.find(c => c.id === selectedCategory)?.label}${showPYQs ? ' (Free)' : ''}`
-              : 'Top Purchased Notes'}
+            {isSearching
+              ? `Search Results for "${searchQuery}"`
+              : selectedCategory
+                ? `${categories.find(c => c.id === selectedCategory)?.label}${showPYQs ? ' (Free)' : ''}`
+                : 'Top Purchased Notes'}
           </h2>
 
           {showPYQs ? (
@@ -156,9 +172,9 @@ export function HomePage({
             )
           ) : (
             // Show Regular Notes
-            filteredNotes.length > 0 ? (
+            displayNotes.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {(selectedCategory ? filteredNotes : topNotes).map((note) => (
+                {displayNotes.map((note) => (
                   <NoteCard
                     key={note.id}
                     note={note}
