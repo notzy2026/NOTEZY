@@ -15,6 +15,8 @@ interface HomePageProps {
   searchQuery: string;
   onSearchChange?: (query: string) => void;
   onRequestNotes?: () => void;
+  paymentLoading?: boolean;
+  purchasingNoteId?: string | null;
 }
 
 export function HomePage({
@@ -28,7 +30,9 @@ export function HomePage({
   purchasedIds,
   searchQuery,
   onSearchChange,
-  onRequestNotes
+  onRequestNotes,
+  paymentLoading = false,
+  purchasingNoteId = null
 }: HomePageProps) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
@@ -184,6 +188,8 @@ export function HomePage({
                     onViewNotes={onViewNotes}
                     isBookmarked={bookmarkedIds.includes(note.id)}
                     isPurchased={purchasedIds.includes(note.id)}
+                    paymentLoading={paymentLoading}
+                    purchasingNoteId={purchasingNoteId}
                   />
                 ))}
               </div>

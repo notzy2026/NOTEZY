@@ -41,7 +41,7 @@ export function AdminFreePYQPage({ onBack }: AdminFreePYQPageProps) {
     // --- Direct Drive Upload Logic ---
 
     async function getAccessToken(): Promise<{ accessToken: string; parentFolderId?: string }> {
-        const functions = getFunctions();
+        const functions = getFunctions(undefined, 'asia-south1');
         const getDriveAccessToken = httpsCallable(functions, 'getDriveAccessToken');
         const result = await getDriveAccessToken();
         return result.data as any;

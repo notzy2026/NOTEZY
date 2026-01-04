@@ -1,7 +1,7 @@
 import { User, Edit, Mail, Calendar, Camera, FileText, Trash2, RotateCcw, IndianRupee } from 'lucide-react';
 import { UserProfile, Note } from '../types';
 import { NoteCard } from './NoteCard';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { uploadUserAvatar } from '../lib/storage';
 import { updateUserProfile, softDeleteNote, restoreNote, updateNotePrice } from '../lib/firestore';
@@ -26,6 +26,13 @@ export function ProfilePage({ user, onPreview }: ProfilePageProps) {
   const [editingPriceNote, setEditingPriceNote] = useState<Note | null>(null);
   const [newPrice, setNewPrice] = useState('');
   const [updatingPrice, setUpdatingPrice] = useState(false);
+
+  // Sync local state when user prop changes (e.g., after profile refresh)
+  useEffect(() => {
+    setAvatarUrl(user.avatarUrl);
+    setEditedName(user.name);
+    setEditedBio(user.bio || '');
+  }, [user.avatarUrl, user.name, user.bio]);
 
   const handleSave = async () => {
     if (!authUser) return;
@@ -144,33 +151,36 @@ export function ProfilePage({ user, onPreview }: ProfilePageProps) {
         {/* Profile Header */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 mb-8 shadow-lg">
           <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
-            <div className="relative group">
+            <div className="relative group cursor-pointer" onClick={handleAvatarClick}>
+              {/* Avatar container */}
               <div className="w-24 h-24 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-xl overflow-hidden">
-                {avatarUrl ? (
+                {avatarUrl && avatarUrl.startsWith('http') ? (
                   <img
                     src={avatarUrl}
                     alt={user.name}
-                    className="w-full h-full rounded-2xl object-cover"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
                   />
                 ) : (
                   <User className="w-12 h-12 text-white" />
                 )}
-                {uploadingAvatar && (
-                  <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-2xl">
-                    <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  </div>
-                )}
               </div>
 
-              {/* Camera overlay for changing avatar */}
-              <button
-                onClick={handleAvatarClick}
-                disabled={uploadingAvatar}
-                className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-50 flex items-center justify-center rounded-2xl transition-all cursor-pointer group"
-              >
-                <Camera className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-              </button>
+              {/* Hover overlay - separate from avatar content */}
+              <div className="absolute inset-0 rounded-2xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
+                <Camera className="w-8 h-8 text-white" />
+              </div>
 
+              {/* Upload spinner */}
+              {uploadingAvatar && (
+                <div className="absolute inset-0 rounded-2xl flex items-center justify-center" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
+                  <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                </div>
+              )}
+
+              {/* Hidden file input */}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -179,6 +189,7 @@ export function ProfilePage({ user, onPreview }: ProfilePageProps) {
                 className="hidden"
               />
 
+              {/* Online indicator */}
               <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-green-500 rounded-lg border-4 border-white dark:border-gray-900"></div>
             </div>
 

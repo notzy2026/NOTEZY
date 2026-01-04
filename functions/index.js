@@ -1,4 +1,4 @@
-const functions = require('firebase-functions');
+const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
@@ -6,6 +6,12 @@ const crypto = require('crypto');
 // Initialize Firebase Admin
 admin.initializeApp();
 const db = admin.firestore();
+
+// Common options for all functions - Asia South 1 for lower latency in India
+const functionOptions = {
+    region: 'asia-south1',
+    concurrency: 80,
+};
 
 // Lazy initialization of Razorpay - only when actually needed
 let razorpayInstance = null;
@@ -23,18 +29,18 @@ function getRazorpay() {
  * Create Razorpay Order
  * Called when user clicks "Buy" button
  */
-exports.createRazorpayOrder = functions.https.onCall(async (data, context) => {
+exports.createRazorpayOrder = onCall(functionOptions, async (request) => {
     // Verify user is authenticated
-    if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in to make a purchase');
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in to make a purchase');
     }
 
-    const { noteId, amount } = data;
-    const userId = context.auth.uid;
+    const { noteId, amount } = request.data;
+    const userId = request.auth.uid;
 
     // Validate input
     if (!noteId || !amount) {
-        throw new functions.https.HttpsError('invalid-argument', 'Note ID and amount are required');
+        throw new HttpsError('invalid-argument', 'Note ID and amount are required');
     }
 
     // Check if already purchased
@@ -44,13 +50,13 @@ exports.createRazorpayOrder = functions.https.onCall(async (data, context) => {
         .get();
 
     if (!existingPurchase.empty) {
-        throw new functions.https.HttpsError('already-exists', 'You have already purchased this note');
+        throw new HttpsError('already-exists', 'You have already purchased this note');
     }
 
     // Get note details for receipt
     const noteDoc = await db.collection('notes').doc(noteId).get();
     if (!noteDoc.exists) {
-        throw new functions.https.HttpsError('not-found', 'Note not found');
+        throw new HttpsError('not-found', 'Note not found');
     }
 
     try {
@@ -83,7 +89,7 @@ exports.createRazorpayOrder = functions.https.onCall(async (data, context) => {
         };
     } catch (error) {
         console.error('Error creating Razorpay order:', error);
-        throw new functions.https.HttpsError('internal', 'Failed to create payment order');
+        throw new HttpsError('internal', 'Failed to create payment order');
     }
 });
 
@@ -91,31 +97,31 @@ exports.createRazorpayOrder = functions.https.onCall(async (data, context) => {
  * Verify Razorpay Payment
  * Called after successful payment on frontend
  */
-exports.verifyRazorpayPayment = functions.https.onCall(async (data, context) => {
+exports.verifyRazorpayPayment = onCall(functionOptions, async (request) => {
     // Verify user is authenticated
-    if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in');
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in');
     }
 
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = data;
-    const userId = context.auth.uid;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = request.data;
+    const userId = request.auth.uid;
 
     // Validate input
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-        throw new functions.https.HttpsError('invalid-argument', 'Payment details are required');
+        throw new HttpsError('invalid-argument', 'Payment details are required');
     }
 
     // Get the order from Firestore
     const orderDoc = await db.collection('razorpay_orders').doc(razorpay_order_id).get();
     if (!orderDoc.exists) {
-        throw new functions.https.HttpsError('not-found', 'Order not found');
+        throw new HttpsError('not-found', 'Order not found');
     }
 
     const orderData = orderDoc.data();
 
     // Verify the user making request is the same who created the order
     if (orderData.userId !== userId) {
-        throw new functions.https.HttpsError('permission-denied', 'Unauthorized');
+        throw new HttpsError('permission-denied', 'Unauthorized');
     }
 
     // Verify payment signature
@@ -131,7 +137,7 @@ exports.verifyRazorpayPayment = functions.https.onCall(async (data, context) => 
             failureReason: 'Signature verification failed',
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
-        throw new functions.https.HttpsError('invalid-argument', 'Payment verification failed');
+        throw new HttpsError('invalid-argument', 'Payment verification failed');
     }
 
     // Payment is valid - process the purchase
@@ -191,7 +197,6 @@ exports.verifyRazorpayPayment = functions.https.onCall(async (data, context) => 
 const { google } = require('googleapis');
 
 // Lazy initialization of Google Drive API
-// Lazy initialization of Google Drive API
 let driveInstance = null;
 let authClient = null;
 
@@ -224,18 +229,18 @@ function getDrive() {
  * Upload PYQ to Google Drive
  * Called after user uploads PYQ to Firebase Storage
  */
-exports.uploadPYQToDrive = functions.https.onCall(async (data, context) => {
+exports.uploadPYQToDrive = onCall(functionOptions, async (request) => {
     // Verify user is authenticated
-    if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in to upload PYQ');
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in to upload PYQ');
     }
 
-    const { storagePath, courseCode, courseName, fileName } = data;
-    const userId = context.auth.uid;
+    const { storagePath, courseCode, courseName, fileName } = request.data;
+    const userId = request.auth.uid;
 
     // Validate input
     if (!storagePath || !courseCode || !courseName || !fileName) {
-        throw new functions.https.HttpsError('invalid-argument', 'Storage path, course code, course name, and file name are required');
+        throw new HttpsError('invalid-argument', 'Storage path, course code, course name, and file name are required');
     }
 
     const drive = getDrive();
@@ -345,14 +350,14 @@ exports.uploadPYQToDrive = functions.https.onCall(async (data, context) => {
         };
     } catch (error) {
         console.error('Error uploading PYQ to Drive:', error);
-        throw new functions.https.HttpsError('internal', 'Failed to upload PYQ to Google Drive: ' + error.message);
+        throw new HttpsError('internal', 'Failed to upload PYQ to Google Drive: ' + error.message);
     }
 });
 
 /**
  * Get list of courses from freePYQs collection
  */
-exports.getCourses = functions.https.onCall(async (data, context) => {
+exports.getCourses = onCall(functionOptions, async (request) => {
     try {
         const snapshot = await db.collection('courses').get();
         const courses = snapshot.docs.map(doc => ({
@@ -362,22 +367,22 @@ exports.getCourses = functions.https.onCall(async (data, context) => {
         return { courses };
     } catch (error) {
         console.error('Error getting courses:', error);
-        throw new functions.https.HttpsError('internal', 'Failed to get courses');
+        throw new HttpsError('internal', 'Failed to get courses');
     }
 });
 
 /**
  * Add a new course
  */
-exports.addCourse = functions.https.onCall(async (data, context) => {
-    if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in');
+exports.addCourse = onCall(functionOptions, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in');
     }
 
-    const { courseCode, courseName } = data;
+    const { courseCode, courseName } = request.data;
 
     if (!courseCode || !courseName) {
-        throw new functions.https.HttpsError('invalid-argument', 'Course code and name are required');
+        throw new HttpsError('invalid-argument', 'Course code and name are required');
     }
 
     try {
@@ -399,7 +404,7 @@ exports.addCourse = functions.https.onCall(async (data, context) => {
         return { success: true, courseId: docRef.id };
     } catch (error) {
         console.error('Error adding course:', error);
-        throw new functions.https.HttpsError('internal', 'Failed to add course');
+        throw new HttpsError('internal', 'Failed to add course');
     }
 });
 
@@ -407,19 +412,14 @@ exports.addCourse = functions.https.onCall(async (data, context) => {
  * Get Google Drive Access Token for Frontend Upload
  * Returns a temporary access token so frontend can upload directly to Drive
  */
-exports.getDriveAccessToken = functions.https.onCall(async (data, context) => {
-    if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'User must be logged in');
+exports.getDriveAccessToken = onCall(functionOptions, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in');
     }
 
     try {
         const auth = getAuthClient();
         const tokenResponse = await auth.getAccessToken();
-
-        // tokenResponse can be just the token string or an object { token, res } depending on version
-        // Using getAccessToken() typically returns { token: '...', res: ... } or just resolves token.
-        // Actually GoogleAuth.getAccessToken() returns string. 
-        // OAuth2.getAccessToken() returns { token, res: { data: { expiry_date, ... } } }
 
         return {
             accessToken: tokenResponse.token || tokenResponse,
@@ -431,6 +431,6 @@ exports.getDriveAccessToken = functions.https.onCall(async (data, context) => {
         };
     } catch (error) {
         console.error('Error getting access token:', error);
-        throw new functions.https.HttpsError('internal', 'Failed to get access token: ' + error.message);
+        throw new HttpsError('internal', 'Failed to get access token: ' + error.message);
     }
 });

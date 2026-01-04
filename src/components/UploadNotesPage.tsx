@@ -1,4 +1,4 @@
-import { Upload, Image, FileText, IndianRupee, Tag, File, Loader2, BookOpen, Plus } from 'lucide-react';
+import { Upload, Image, FileText, IndianRupee, Tag, File, Loader2, BookOpen, Plus, X, GripVertical } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { NoteCategory, Course } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -22,6 +22,7 @@ export function UploadNotesPage() {
   const [uploadProgress, setUploadProgress] = useState('');
   const [error, setError] = useState('');
   const [compressionResults, setCompressionResults] = useState<CompressionResult[]>([]);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   // PYQ specific state
   const [courses, setCourses] = useState<Course[]>([]);
@@ -80,6 +81,12 @@ export function UploadNotesPage() {
       return;
     }
 
+    // Price validation (only for non-PYQ)
+    if (category !== 'pyq' && parseFloat(price) < 20) {
+      setError('Minimum price is ₹20');
+      return;
+    }
+
     // PYQ validation
     if (category === 'pyq') {
       const courseCode = isAddingNewCourse ? newCourseCode : selectedCourseCode;
@@ -123,7 +130,7 @@ export function UploadNotesPage() {
 
         // Call Cloud Function to transfer to Google Drive
         setUploadProgress('Transferring to Google Drive...');
-        const functions = getFunctions();
+        const functions = getFunctions(undefined, 'asia-south1');
         const uploadPYQToDrive = httpsCallable(functions, 'uploadPYQToDrive');
 
         const result = await uploadPYQToDrive({
@@ -260,6 +267,71 @@ export function UploadNotesPage() {
   const getTotalPdfSize = () => {
     const totalBytes = pdfFiles.reduce((sum, file) => sum + file.size, 0);
     return (totalBytes / 1024 / 1024).toFixed(2);
+  };
+
+  // Remove a PDF file at the given index
+  const removePdfFile = async (indexToRemove: number) => {
+    const newFiles = pdfFiles.filter((_, index) => index !== indexToRemove);
+    setPdfFiles(newFiles);
+
+    // If we removed the first file and there are still files, re-extract previews from the new first file
+    if (indexToRemove === 0 && newFiles.length > 0 && category !== 'pyq') {
+      setExtracting(true);
+      try {
+        const previews = await extractPdfPreviews(newFiles[0], 4);
+        setPreviewFiles(previews);
+      } catch (err) {
+        console.error('Error extracting previews:', err);
+        setPreviewFiles([]);
+      } finally {
+        setExtracting(false);
+      }
+    } else if (newFiles.length === 0) {
+      setPreviewFiles([]);
+    }
+  };
+
+  // Drag and drop handlers for reordering
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = async (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === dropIndex) {
+      setDraggedIndex(null);
+      return;
+    }
+
+    const newFiles = [...pdfFiles];
+    const draggedFile = newFiles[draggedIndex];
+    newFiles.splice(draggedIndex, 1);
+    newFiles.splice(dropIndex, 0, draggedFile);
+    setPdfFiles(newFiles);
+
+    // If the first file changed, re-extract previews
+    const firstFileChanged = draggedIndex === 0 || dropIndex === 0;
+    if (firstFileChanged && category !== 'pyq') {
+      setExtracting(true);
+      try {
+        const previews = await extractPdfPreviews(newFiles[0], 4);
+        setPreviewFiles(previews);
+      } catch (err) {
+        console.error('Error extracting previews:', err);
+      } finally {
+        setExtracting(false);
+      }
+    }
+
+    setDraggedIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
   };
 
   return (
@@ -437,12 +509,13 @@ export function UploadNotesPage() {
                     type="number"
                     value={price}
                     onChange={(e) => setPrice(e.target.value)}
-                    placeholder="9.99"
+                    placeholder="20"
                     step="0.01"
-                    min="0"
+                    min="20"
                     required
                     className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                   />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Minimum price: ₹20</p>
                 </div>
               </>
             )}
@@ -468,11 +541,48 @@ export function UploadNotesPage() {
                   <div className="text-sm text-green-600 dark:text-green-400">
                     {pdfFiles.length} PDF file(s) selected ({getTotalPdfSize()} MB total)
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  {pdfFiles.length > 1 && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                      Drag files to reorder • First file is used for preview images
+                    </p>
+                  )}
+                  <div className="space-y-2">
                     {pdfFiles.map((file, index) => (
-                      <div key={index} className="flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded-lg text-xs text-gray-600 dark:text-gray-400">
-                        <File className="w-3 h-3" />
-                        <span className="max-w-[150px] truncate">{file.name}</span>
+                      <div
+                        key={index}
+                        draggable
+                        onDragStart={() => handleDragStart(index)}
+                        onDragOver={(e) => handleDragOver(e, index)}
+                        onDrop={(e) => handleDrop(e, index)}
+                        onDragEnd={handleDragEnd}
+                        className={`flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm transition-all ${draggedIndex === index ? 'opacity-50 scale-95' : ''
+                          } ${draggedIndex !== null && draggedIndex !== index ? 'border-2 border-dashed border-blue-400' : 'border-2 border-transparent'}`}
+                      >
+                        {/* Drag Handle */}
+                        <div className="cursor-grab active:cursor-grabbing text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">
+                          <GripVertical className="w-4 h-4" />
+                        </div>
+                        {/* Position Number */}
+                        <div className="w-6 h-6 flex items-center justify-center bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-full text-xs font-medium">
+                          {index + 1}
+                        </div>
+                        {/* File Icon */}
+                        <File className="w-4 h-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />
+                        {/* File Name */}
+                        <span className="flex-1 truncate text-gray-700 dark:text-gray-300">{file.name}</span>
+                        {/* File Size */}
+                        <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
+                          {(file.size / 1024 / 1024).toFixed(2)} MB
+                        </span>
+                        {/* Remove Button */}
+                        <button
+                          type="button"
+                          onClick={() => removePdfFile(index)}
+                          className="p-1 rounded-full hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-500 transition-colors"
+                          title="Remove file"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
                       </div>
                     ))}
                   </div>

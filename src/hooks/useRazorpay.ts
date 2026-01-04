@@ -32,7 +32,7 @@ export function useRazorpay() {
         setError(null);
 
         try {
-            const functions = getFunctions();
+            const functions = getFunctions(undefined, 'asia-south1');
             const createOrder = httpsCallable(functions, 'createRazorpayOrder');
 
             // Step 1: Create order on backend

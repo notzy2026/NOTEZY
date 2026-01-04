@@ -111,3 +111,16 @@ export interface NoteRequest {
   respondedAt?: string;
 }
 
+export type NotificationType = 'purchase' | 'review' | 'payout' | 'system';
+
+export interface Notification {
+  id: string;
+  userId: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+  linkTo?: string; // Optional page to navigate to
+  relatedId?: string; // Related note/payout ID
+}

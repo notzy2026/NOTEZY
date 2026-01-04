@@ -1,5 +1,6 @@
-import { Search, Bell, User, Upload } from 'lucide-react';
+import { Search, User, Upload } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { NotificationsDropdown } from './NotificationsDropdown';
 
 interface TopBarProps {
   searchQuery: string;
@@ -38,10 +39,7 @@ export function TopBar({ searchQuery, onSearchChange, showSearch = true, onNavig
             <span className="font-medium">Upload</span>
           </button>
 
-          <button className="relative p-2.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 transition-colors">
-            <Bell className="w-5 h-5" />
-            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>
-          </button>
+          <NotificationsDropdown onNavigate={onNavigate} />
 
           <div className="flex items-center gap-3 pl-3 border-l border-gray-200 dark:border-gray-700">
             <div className="text-right">
@@ -50,8 +48,20 @@ export function TopBar({ searchQuery, onSearchChange, showSearch = true, onNavig
                 {user?.uploadedNotes && user.uploadedNotes.length > 0 ? 'Seller' : 'Member'}
               </div>
             </div>
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center">
-              <User className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center overflow-hidden">
+              {user?.avatarUrl && user.avatarUrl.startsWith('http') ? (
+                <img
+                  src={user.avatarUrl}
+                  alt={user.name || 'User'}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              ) : null}
+              {(!user?.avatarUrl || !user.avatarUrl.startsWith('http')) && (
+                <User className="w-5 h-5 text-white" />
+              )}
             </div>
           </div>
         </div>

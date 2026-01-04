@@ -9,15 +9,19 @@ interface BookmarksPageProps {
   onPurchase: (noteId: string) => void;
   onViewNotes: (noteId: string) => void;
   purchasedIds: string[];
+  paymentLoading?: boolean;
+  purchasingNoteId?: string | null;
 }
 
-export function BookmarksPage({ 
-  bookmarkedNotes, 
-  onPreview, 
-  onBookmark, 
+export function BookmarksPage({
+  bookmarkedNotes,
+  onPreview,
+  onBookmark,
   onPurchase,
   onViewNotes,
-  purchasedIds
+  purchasedIds,
+  paymentLoading = false,
+  purchasingNoteId = null
 }: BookmarksPageProps) {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-950 pb-24 lg:pb-8 lg:ml-64 mobile-page-content">
@@ -50,6 +54,8 @@ export function BookmarksPage({
                   onViewNotes={onViewNotes}
                   isBookmarked={true}
                   isPurchased={purchasedIds.includes(note.id)}
+                  paymentLoading={paymentLoading}
+                  purchasingNoteId={purchasingNoteId}
                 />
               ))}
             </div>

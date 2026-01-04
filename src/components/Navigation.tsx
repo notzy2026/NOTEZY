@@ -2,6 +2,7 @@ import { Home, Download, Bookmark, IndianRupee, User, Upload, Menu, X, Moon, Sun
 import { useState } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { NotificationsDropdown } from './NotificationsDropdown';
 
 interface NavigationProps {
   currentPage: string;
@@ -194,6 +195,20 @@ export function Navigation({ currentPage, onNavigate, onLoginRequest }: Navigati
                 <Moon className="w-5 h-5 text-gray-700 dark:text-slate-300" />
               )}
             </button>
+            {/* Notifications - only show for logged in users */}
+            {!isGuest && (
+              <NotificationsDropdown onNavigate={onNavigate} />
+            )}
+            {/* Login for Guests */}
+            {isGuest && onLoginRequest && (
+              <button
+                onClick={onLoginRequest}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
+              >
+                <LogIn className="w-4 h-4" />
+                <span>Login</span>
+              </button>
+            )}
             {/* Logout for Admin */}
             {isAdmin && (
               <button

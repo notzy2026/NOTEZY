@@ -1,4 +1,5 @@
 import { Note } from '../types';
+import { Loader2 } from 'lucide-react';
 import { Star, ShoppingCart, Bookmark, Eye, FileText, TrendingUp, ShieldCheck } from 'lucide-react';
 
 interface NoteCardProps {
@@ -9,6 +10,8 @@ interface NoteCardProps {
   onViewNotes?: (noteId: string) => void;
   isBookmarked?: boolean;
   isPurchased?: boolean;
+  paymentLoading?: boolean;
+  purchasingNoteId?: string | null;
 }
 
 export function NoteCard({
@@ -18,7 +21,9 @@ export function NoteCard({
   onPurchase,
   onViewNotes,
   isBookmarked = false,
-  isPurchased = false
+  isPurchased = false,
+  paymentLoading = false,
+  purchasingNoteId = null
 }: NoteCardProps) {
   return (
     <div className="glass rounded-2xl overflow-hidden shadow-md hover:shadow-2xl transition-all border border-gray-200 dark:border-slate-800 group">
@@ -94,10 +99,20 @@ export function NoteCard({
         {!isPurchased && onPurchase && (
           <button
             onClick={() => onPurchase(note.id)}
-            className="w-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 text-white py-2.5 px-4 rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2"
+            disabled={paymentLoading && purchasingNoteId === note.id}
+            className="w-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 text-white py-2.5 px-4 rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-wait"
           >
-            <ShoppingCart className="w-4 h-4" />
-            Purchase Now
+            {paymentLoading && purchasingNoteId === note.id ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              <>
+                <ShoppingCart className="w-4 h-4" />
+                Purchase Now
+              </>
+            )}
           </button>
         )}
 

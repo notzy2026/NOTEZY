@@ -14,7 +14,7 @@ import {
     increment,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Note, UserProfile, NoteCategory, SupportChat, ChatMessage, Review, PayoutRequest, NoteRequest, FreePYQ, Course } from '../types';
+import { Note, UserProfile, NoteCategory, SupportChat, ChatMessage, Review, PayoutRequest, NoteRequest, FreePYQ, Course, Notification, NotificationType } from '../types';
 
 // Collection references
 const usersCollection = collection(db, 'users');
@@ -26,6 +26,7 @@ const payoutsCollection = collection(db, 'payouts');
 const noteRequestsCollection = collection(db, 'noteRequests');
 const freePYQsCollection = collection(db, 'freePYQs');
 const coursesCollection = collection(db, 'courses');
+const notificationsCollection = collection(db, 'notifications');
 const settingsDoc = doc(db, 'settings', 'platform');
 
 // ============ USER FUNCTIONS ============
@@ -247,7 +248,7 @@ export async function getUserPurchases(uid: string): Promise<Note[]> {
     return notes;
 }
 
-export async function addPurchase(uid: string, noteId: string): Promise<void> {
+export async function addPurchase(uid: string, noteId: string, buyerName?: string): Promise<void> {
     // Check if already purchased
     const q = query(
         purchasesCollection,
@@ -265,6 +266,19 @@ export async function addPurchase(uid: string, noteId: string): Promise<void> {
 
     // Increment sales count
     await incrementNoteSales(noteId);
+
+    // Notify the seller about the purchase
+    const note = await getNoteById(noteId);
+    if (note && note.uploaderId !== uid) {
+        await createNotification({
+            userId: note.uploaderId,
+            type: 'purchase',
+            title: 'New Sale! 🎉',
+            message: `${buyerName || 'Someone'} purchased your note "${note.title}"`,
+            linkTo: 'earnings',
+            relatedId: noteId,
+        });
+    }
 }
 
 export async function isNotePurchased(uid: string, noteId: string): Promise<boolean> {
@@ -430,6 +444,20 @@ export async function addReview(reviewData: {
 
     // Update note's average rating
     await updateNoteRating(reviewData.noteId);
+
+    // Notify the seller about the review
+    const note = await getNoteById(reviewData.noteId);
+    if (note && note.uploaderId !== reviewData.userId) {
+        const stars = '⭐'.repeat(reviewData.rating);
+        await createNotification({
+            userId: note.uploaderId,
+            type: 'review',
+            title: 'New Review!',
+            message: `${reviewData.userName} left a ${reviewData.rating}-star review ${stars} on "${note.title}"`,
+            linkTo: 'profile',
+            relatedId: reviewData.noteId,
+        });
+    }
 }
 
 export async function updateNoteRating(noteId: string): Promise<void> {
@@ -727,6 +755,7 @@ export async function markPayoutComplete(requestId: string): Promise<void> {
 
     const payoutData = payoutDoc.data();
     const userId = payoutData.userId;
+    const netAmount = payoutData.netAmount;
 
     // Update payout status
     await updateDoc(doc(payoutsCollection, requestId), {
@@ -738,6 +767,16 @@ export async function markPayoutComplete(requestId: string): Promise<void> {
     await updateDoc(doc(usersCollection, userId), {
         totalEarnings: 0,
         pendingPayout: false,
+    });
+
+    // Notify the user about payout completion
+    await createNotification({
+        userId: userId,
+        type: 'payout',
+        title: 'Payout Completed! 💰',
+        message: `Your payout of ₹${netAmount.toFixed(2)} has been sent to your UPI ID`,
+        linkTo: 'earnings',
+        relatedId: requestId,
     });
 }
 
@@ -952,4 +991,78 @@ export async function addCourse(courseCode: string, courseName: string): Promise
         createdAt: Timestamp.now(),
     });
     return docRef.id;
+}
+
+// ============ NOTIFICATIONS FUNCTIONS ============
+
+export async function getUserNotifications(userId: string): Promise<Notification[]> {
+    const q = query(
+        notificationsCollection,
+        where('userId', '==', userId),
+        orderBy('createdAt', 'desc')
+    );
+    const querySnapshot = await getDocs(q);
+
+    return querySnapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+            id: docSnap.id,
+            userId: data.userId,
+            type: data.type as NotificationType,
+            title: data.title,
+            message: data.message,
+            isRead: data.isRead || false,
+            createdAt: data.createdAt instanceof Timestamp
+                ? data.createdAt.toDate().toISOString()
+                : data.createdAt,
+            linkTo: data.linkTo,
+            relatedId: data.relatedId,
+        };
+    });
+}
+
+export async function createNotification(data: {
+    userId: string;
+    type: NotificationType;
+    title: string;
+    message: string;
+    linkTo?: string;
+    relatedId?: string;
+}): Promise<string> {
+    const docRef = await addDoc(notificationsCollection, {
+        ...data,
+        isRead: false,
+        createdAt: Timestamp.now(),
+    });
+    return docRef.id;
+}
+
+export async function markNotificationRead(notificationId: string): Promise<void> {
+    await updateDoc(doc(notificationsCollection, notificationId), {
+        isRead: true,
+    });
+}
+
+export async function markAllNotificationsRead(userId: string): Promise<void> {
+    const q = query(
+        notificationsCollection,
+        where('userId', '==', userId),
+        where('isRead', '==', false)
+    );
+    const querySnapshot = await getDocs(q);
+
+    const updatePromises = querySnapshot.docs.map((docSnap) =>
+        updateDoc(doc(notificationsCollection, docSnap.id), { isRead: true })
+    );
+    await Promise.all(updatePromises);
+}
+
+export async function getUnreadNotificationCount(userId: string): Promise<number> {
+    const q = query(
+        notificationsCollection,
+        where('userId', '==', userId),
+        where('isRead', '==', false)
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.size;
 }

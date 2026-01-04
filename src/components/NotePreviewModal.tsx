@@ -1,4 +1,4 @@
-import { X, Star, ChevronLeft, ChevronRight, User, Download, File, ShoppingCart } from 'lucide-react';
+import { X, Star, ChevronLeft, ChevronRight, User, Download, File, ShoppingCart, Loader2 } from 'lucide-react';
 import { Note, Review } from '../types';
 import { useState, useEffect } from 'react';
 import { getReviewsForNote, hasUserReviewedNote, addReview, isNotePurchased } from '../lib/firestore';
@@ -8,9 +8,11 @@ interface NotePreviewModalProps {
   note: Note;
   onClose: () => void;
   onPurchase?: (noteId: string) => void;
+  paymentLoading?: boolean;
+  purchasingNoteId?: string | null;
 }
 
-export function NotePreviewModal({ note, onClose, onPurchase }: NotePreviewModalProps) {
+export function NotePreviewModal({ note, onClose, onPurchase, paymentLoading = false, purchasingNoteId = null }: NotePreviewModalProps) {
   const { user, userProfile } = useAuth();
   const [currentPage, setCurrentPage] = useState(0);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -22,6 +24,22 @@ export function NotePreviewModal({ note, onClose, onPurchase }: NotePreviewModal
   const [reviewComment, setReviewComment] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
   const [reviewError, setReviewError] = useState('');
+  const [imageLoading, setImageLoading] = useState(true);
+  const [preloadedImages, setPreloadedImages] = useState<Set<number>>(new Set());
+
+  // Preload all preview images when modal opens
+  useEffect(() => {
+    const preloadImages = () => {
+      note.previewPages.forEach((src, index) => {
+        const img = new Image();
+        img.onload = () => {
+          setPreloadedImages(prev => new Set(prev).add(index));
+        };
+        img.src = src;
+      });
+    };
+    preloadImages();
+  }, [note.previewPages]);
 
   useEffect(() => {
     loadReviews();
@@ -81,13 +99,21 @@ export function NotePreviewModal({ note, onClose, onPurchase }: NotePreviewModal
 
   const nextPage = () => {
     if (currentPage < note.previewPages.length - 1) {
-      setCurrentPage(currentPage + 1);
+      const nextPageIndex = currentPage + 1;
+      if (!preloadedImages.has(nextPageIndex)) {
+        setImageLoading(true);
+      }
+      setCurrentPage(nextPageIndex);
     }
   };
 
   const prevPage = () => {
     if (currentPage > 0) {
-      setCurrentPage(currentPage - 1);
+      const prevPageIndex = currentPage - 1;
+      if (!preloadedImages.has(prevPageIndex)) {
+        setImageLoading(true);
+      }
+      setCurrentPage(prevPageIndex);
     }
   };
 
@@ -108,11 +134,19 @@ export function NotePreviewModal({ note, onClose, onPurchase }: NotePreviewModal
           {/* Preview Pages */}
           <div className="mb-6">
             <h3 className="text-gray-900 dark:text-white mb-3">Preview Pages ({note.previewPages.length} pages)</h3>
-            <div className="relative bg-gray-100 dark:bg-gray-800 rounded-2xl overflow-hidden">
+            <div className="relative bg-gray-100 dark:bg-gray-800 rounded-2xl overflow-hidden min-h-[300px] flex items-center justify-center">
+              {/* Loading spinner */}
+              {imageLoading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-800 z-10">
+                  <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                </div>
+              )}
               <img
                 src={note.previewPages[currentPage]}
                 alt={`Page ${currentPage + 1}`}
-                className="w-full h-auto lg:w-auto lg:h-full lg:max-h-[70vh] lg:mx-auto object-contain"
+                className={`w-full h-auto lg:w-auto lg:h-full lg:max-h-[70vh] lg:mx-auto object-contain transition-opacity duration-200 ${imageLoading ? 'opacity-0' : 'opacity-100'}`}
+                onLoad={() => setImageLoading(false)}
+                onLoadStart={() => !preloadedImages.has(currentPage) && setImageLoading(true)}
               />
 
               {note.previewPages.length > 1 && (
@@ -145,10 +179,20 @@ export function NotePreviewModal({ note, onClose, onPurchase }: NotePreviewModal
               <div className="mb-6 flex justify-center">
                 <button
                   onClick={() => onPurchase(note.id)}
-                  className="w-full md:w-auto min-w-[200px] bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white py-3 px-6 rounded-xl text-lg font-semibold hover:shadow-lg transition-all hover:-translate-y-0.5 flex items-center justify-center gap-2 animate-pulse"
+                  disabled={paymentLoading && purchasingNoteId === note.id}
+                  className="w-full md:w-auto min-w-[200px] bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white py-3 px-6 rounded-xl text-lg font-semibold hover:shadow-lg transition-all hover:-translate-y-0.5 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-wait"
                 >
-                  <ShoppingCart className="w-5 h-5" />
-                  Purchase for ₹{note.price}
+                  {paymentLoading && purchasingNoteId === note.id ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingCart className="w-5 h-5" />
+                      Purchase for ₹{note.price}
+                    </>
+                  )}
                 </button>
               </div>
             )}

@@ -63,6 +63,7 @@ function AppContent() {
   const [viewerNote, setViewerNote] = useState<Note | null>(null);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [loginPromptMessage, setLoginPromptMessage] = useState('');
+  const [purchasingNoteId, setPurchasingNoteId] = useState<string | null>(null);
 
   // Redirect admin users to admin page by default
   useEffect(() => {
@@ -200,6 +201,7 @@ function AppContent() {
     const note = notes.find(n => n.id === noteId);
     if (note && !purchasedIds.includes(noteId)) {
       try {
+        setPurchasingNoteId(noteId);
         // Initiate Razorpay payment
         const result = await initiatePayment(noteId, note.price, note.title);
 
@@ -219,6 +221,8 @@ function AppContent() {
       } catch (error) {
         console.error('Error purchasing note:', error);
         alert('Failed to initiate payment. Please try again.');
+      } finally {
+        setPurchasingNoteId(null);
       }
     }
   };
@@ -342,6 +346,8 @@ function AppContent() {
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           onRequestNotes={() => setCurrentPage('my-requests')}
+          paymentLoading={paymentLoading}
+          purchasingNoteId={purchasingNoteId}
         />
       )}
 
@@ -361,6 +367,8 @@ function AppContent() {
           onPurchase={handlePurchase}
           onViewNotes={handleViewNotes}
           purchasedIds={purchasedIds}
+          paymentLoading={paymentLoading}
+          purchasingNoteId={purchasingNoteId}
         />
       )}
 
@@ -453,6 +461,8 @@ function AppContent() {
           note={previewNote}
           onClose={() => setPreviewNote(null)}
           onPurchase={handlePurchase}
+          paymentLoading={paymentLoading}
+          purchasingNoteId={purchasingNoteId}
         />
       )}
 
