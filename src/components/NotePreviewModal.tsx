@@ -225,6 +225,15 @@ export function NotePreviewModal({ note, onClose, onPurchase, paymentLoading = f
               <div className="text-white text-opacity-90 text-sm mb-1">Category</div>
               <div className="text-white text-xl capitalize">{note.category}</div>
             </div>
+            {note.pdfUrls && note.pdfUrls.length > 0 && (
+              <div className="bg-gradient-to-br from-pink-500 to-rose-600 p-4 rounded-xl shadow-lg">
+                <div className="text-white text-opacity-90 text-sm mb-1">Files</div>
+                <div className="flex items-center gap-1 text-white">
+                  <File className="w-4 h-4" />
+                  <span className="text-xl">{note.pdfUrls.length}</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Seller Info */}

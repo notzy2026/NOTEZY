@@ -204,7 +204,11 @@ export function UploadNotesPage() {
           pdfUrls,
           uploaderId: user.uid,
           uploaderName: userProfile.name,
+          uploaderId: user.uid,
+          uploaderName: userProfile.name,
         });
+
+        console.log('Note created with PDF URLs:', pdfUrls);
 
         setSubmitted(true);
         setUploadProgress('');

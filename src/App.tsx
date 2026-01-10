@@ -31,9 +31,12 @@ import { AdminPayoutsPage } from './components/AdminPayoutsPage';
 import { AdminRequestsPage } from './components/AdminRequestsPage';
 import { AdminFreePYQPage } from './components/AdminFreePYQPage';
 import { MyRequestsPage } from './components/MyRequestsPage';
+
 import { LoginPromptModal } from './components/LoginPromptModal';
+import { OnboardingModal } from './components/OnboardingModal';
 import {
   PublicTermsPage,
+
   PublicPrivacyPage,
   PublicRefundPage,
   PublicShippingPage,
@@ -54,8 +57,9 @@ import {
 import { useRazorpay } from './hooks/useRazorpay';
 
 function AppContent() {
-  const { isAuthenticated, isLoading, user, userProfile, logout, isGuest, exitGuestMode } = useAuth();
+  const { isAuthenticated, isLoading, user, userProfile, logout, isGuest, exitGuestMode, isNewUser, setIsNewUser } = useAuth();
   const { initiatePayment, loading: paymentLoading } = useRazorpay();
+
   const [authPage, setAuthPage] = useState<'landing' | 'login' | 'signup'>('landing');
   const [currentPage, setCurrentPage] = useState('home');
   const [searchQuery, setSearchQuery] = useState('');
@@ -64,6 +68,29 @@ function AppContent() {
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [loginPromptMessage, setLoginPromptMessage] = useState('');
   const [purchasingNoteId, setPurchasingNoteId] = useState<string | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Show onboarding for guests (first visit) or new users
+  useEffect(() => {
+    if (isGuest || isNewUser) {
+      // Small delay to ensure smooth entrance animation after page load
+      const timer = setTimeout(() => setShowOnboarding(true), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [isGuest, isNewUser]);
+
+  const handleCloseOnboarding = () => {
+    setShowOnboarding(false);
+    if (isNewUser) {
+      setIsNewUser(false);
+    }
+  };
+
+  const handleKnowMore = () => {
+    exitGuestMode();
+    setAuthPage('landing');
+  };
+
 
   // Redirect admin users to admin page by default
   useEffect(() => {
@@ -348,7 +375,10 @@ function AppContent() {
           onRequestNotes={() => setCurrentPage('my-requests')}
           paymentLoading={paymentLoading}
           purchasingNoteId={purchasingNoteId}
+          isGuest={isGuest}
+          onKnowMore={handleKnowMore}
         />
+
       )}
 
       {currentPage === 'downloads' && (
@@ -481,9 +511,17 @@ function AppContent() {
         onSignup={handleGuestSignupRedirect}
         message={loginPromptMessage}
       />
+
+      {/* Onboarding Modal */}
+      <OnboardingModal
+        isOpen={showOnboarding}
+        onClose={handleCloseOnboarding}
+        isGuest={isGuest}
+      />
     </div>
   );
 }
+
 
 export default function App() {
   return (

@@ -1,5 +1,5 @@
 
-import { BookOpen, ArrowLeft, Plus, Trash2, ExternalLink, File, Loader2 } from 'lucide-react';
+import { BookOpen, ArrowLeft, Plus, Trash2, ExternalLink, File, Loader2, Link as LinkIcon } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { FreePYQ } from '../types';
 import { getFreePYQs, deleteFreePYQ, addFreePYQ } from '../lib/firestore';
@@ -9,6 +9,8 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 interface AdminFreePYQPageProps {
     onBack: () => void;
 }
+
+type UploadMode = 'file' | 'link';
 
 export function AdminFreePYQPage({ onBack }: AdminFreePYQPageProps) {
     const { userProfile } = useAuth();
@@ -21,7 +23,9 @@ export function AdminFreePYQPage({ onBack }: AdminFreePYQPageProps) {
     // Form State
     const [courseCode, setCourseCode] = useState('');
     const [courseName, setCourseName] = useState('');
+    const [uploadMode, setUploadMode] = useState<UploadMode>('file');
     const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+    const [manualLink, setManualLink] = useState('');
 
     useEffect(() => {
         loadPYQs();
@@ -128,40 +132,66 @@ export function AdminFreePYQPage({ onBack }: AdminFreePYQPageProps) {
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
-        if (!courseCode.trim() || !courseName.trim() || selectedFiles.length === 0) return;
+        
+        if (!courseCode.trim() || !courseName.trim()) {
+            alert('Please fill in course details');
+            return;
+        }
+
+        if (uploadMode === 'file' && selectedFiles.length === 0) {
+            alert('Please select files to upload');
+            return;
+        }
+
+        if (uploadMode === 'link' && !manualLink.trim()) {
+            alert('Please enter a Google Drive link');
+            return;
+        }
 
         setSubmitting(true);
         setUploadProgress('Initializing...');
 
         try {
-            // 1. Get Access Token from Backend (securely using stored refresh token)
-            setUploadProgress('Authenticating...');
-            const { accessToken, parentFolderId } = await getAccessToken();
-
-            // 2. Find or Create Folder
-            setUploadProgress('Organizing folders...');
-            const folderName = `${courseCode.trim().toUpperCase()} ${courseName.trim()}`;
-            const { id: folderId, webViewLink: folderLink } = await searchOrCreateFolder(accessToken, parentFolderId, folderName);
-
-            // 3. Make folder public (so all files inside are accessible)
-            setUploadProgress('Setting folder permissions...');
-            await makeFolderPublic(accessToken, folderId);
-
-            // 4. Upload ALL files to the folder
-            for (let i = 0; i < selectedFiles.length; i++) {
-                setUploadProgress(`Uploading file ${i + 1} of ${selectedFiles.length}...`);
-                await uploadFileToDrive(accessToken, folderId, selectedFiles[i]);
+            if (uploadMode === 'link') {
+                // MANUAL LINK MODE
+                await addFreePYQ(
+                    courseCode.trim().toUpperCase(),
+                    courseName.trim(),
+                    manualLink.trim(),
+                    userProfile?.name || 'Admin',
+                    undefined // No folder ID for manual links
+                );
+            } else {
+                // FILE UPLOAD MODE
+                // 1. Get Access Token from Backend (securely using stored refresh token)
+                setUploadProgress('Authenticating...');
+                const { accessToken, parentFolderId } = await getAccessToken();
+    
+                // 2. Find or Create Folder
+                setUploadProgress('Organizing folders...');
+                const folderName = `${courseCode.trim().toUpperCase()} ${courseName.trim()}`;
+                const { id: folderId, webViewLink: folderLink } = await searchOrCreateFolder(accessToken, parentFolderId, folderName);
+    
+                // 3. Make folder public (so all files inside are accessible)
+                setUploadProgress('Setting folder permissions...');
+                await makeFolderPublic(accessToken, folderId);
+    
+                // 4. Upload ALL files to the folder
+                for (let i = 0; i < selectedFiles.length; i++) {
+                    setUploadProgress(`Uploading file ${i + 1} of ${selectedFiles.length}...`);
+                    await uploadFileToDrive(accessToken, folderId, selectedFiles[i]);
+                }
+    
+                // 5. Save to Database (using FOLDER link, not file link)
+                setUploadProgress('Saving to database...');
+                await addFreePYQ(
+                    courseCode.trim().toUpperCase(),
+                    courseName.trim(),
+                    folderLink, // This is the FOLDER link, not the file link
+                    userProfile?.name || 'Admin',
+                    folderId, // Store folder ID for deletion later
+                );
             }
-
-            // 5. Save to Database (using FOLDER link, not file link)
-            setUploadProgress('Saving to database...');
-            await addFreePYQ(
-                courseCode.trim().toUpperCase(),
-                courseName.trim(),
-                folderLink, // This is the FOLDER link, not the file link
-                userProfile?.name || 'Admin',
-                folderId, // Store folder ID for deletion later
-            );
 
             // 6. Refresh List
             await loadPYQs();
@@ -170,9 +200,11 @@ export function AdminFreePYQPage({ onBack }: AdminFreePYQPageProps) {
             setCourseCode('');
             setCourseName('');
             setSelectedFiles([]);
+            setManualLink('');
             setShowForm(false);
             setUploadProgress('');
-            alert(`${selectedFiles.length} file(s) uploaded successfully!`);
+            setUploadMode('file'); // Reset to default
+            alert(uploadMode === 'file' ? `${selectedFiles.length} file(s) uploaded successfully!` : 'Manual link added successfully!');
 
         } catch (error: any) {
             console.error('Error adding PYQ:', error);
@@ -202,7 +234,7 @@ export function AdminFreePYQPage({ onBack }: AdminFreePYQPageProps) {
     async function handleDelete(pyqId: string, driveFolderId?: string) {
         console.log('handleDelete called with:', { pyqId, driveFolderId });
 
-        if (!confirm('Are you sure you want to delete this PYQ? This will also delete the folder and all files from Google Drive!')) return;
+        if (!confirm('Are you sure you want to delete this PYQ?' + (driveFolderId ? ' This will also delete the folder and all files from Google Drive!' : ''))) return;
         try {
             // Delete from Google Drive first (if we have the folder ID)
             if (driveFolderId) {
@@ -212,13 +244,12 @@ export function AdminFreePYQPage({ onBack }: AdminFreePYQPageProps) {
                 await deleteFolderFromDrive(accessToken, driveFolderId);
             } else {
                 console.warn('No driveFolderId stored for this PYQ - cannot delete from Drive');
-                alert('Note: This PYQ was created before folder tracking was added. The Drive folder will NOT be deleted automatically. Please delete it manually from Google Drive.');
             }
 
             // Then delete from database
             await deleteFreePYQ(pyqId);
             setPyqs(prev => prev.filter(p => p.id !== pyqId));
-            alert(driveFolderId ? 'PYQ and Drive folder deleted successfully!' : 'PYQ removed from database (Drive folder not deleted).');
+            alert(driveFolderId ? 'PYQ and Drive folder deleted successfully!' : 'PYQ removed from database.');
         } catch (error: any) {
             console.error('Error deleting PYQ:', error);
             alert(`Failed to delete PYQ: ${error.message || 'Unknown error'}`);
@@ -266,6 +297,35 @@ export function AdminFreePYQPage({ onBack }: AdminFreePYQPageProps) {
                 {showForm && (
                     <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 mb-6 shadow-lg">
                         <h2 className="text-lg text-gray-900 dark:text-white mb-4">Add New PYQ Paper</h2>
+                        
+                        {/* Mode Toggle */}
+                        <div className="flex gap-4 mb-6">
+                            <button
+                                type="button"
+                                onClick={() => setUploadMode('file')}
+                                className={`flex-1 py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors border-2 ${
+                                    uploadMode === 'file'
+                                        ? 'border-green-500 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
+                                        : 'border-transparent bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+                                }`}
+                            >
+                                <File className="w-5 h-5" />
+                                <span className="font-medium">Upload PDF Files</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setUploadMode('link')}
+                                className={`flex-1 py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors border-2 ${
+                                    uploadMode === 'link'
+                                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400'
+                                        : 'border-transparent bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+                                }`}
+                            >
+                                <LinkIcon className="w-5 h-5" />
+                                <span className="font-medium">Manual Drive Link</span>
+                            </button>
+                        </div>
+
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
@@ -292,44 +352,64 @@ export function AdminFreePYQPage({ onBack }: AdminFreePYQPageProps) {
                                 </div>
                             </div>
 
-                            {/* File Upload */}
-                            <div>
-                                <label className="block text-sm text-gray-700 dark:text-gray-300 mb-2">
-                                    <File className="w-4 h-4 inline mr-1" />
-                                    PDF Files (Multiple)
-                                </label>
-                                <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-6 text-center hover:border-green-500 transition-colors">
+                            {/* Conditional Input based on Mode */}
+                            {uploadMode === 'file' ? (
+                                <div>
+                                    <label className="block text-sm text-gray-700 dark:text-gray-300 mb-2">
+                                        <File className="w-4 h-4 inline mr-1" />
+                                        PDF Files (Multiple)
+                                    </label>
+                                    <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-6 text-center hover:border-green-500 transition-colors">
+                                        <input
+                                            type="file"
+                                            accept=".pdf,application/pdf"
+                                            multiple
+                                            onChange={(e) => {
+                                                if (e.target.files && e.target.files.length > 0) {
+                                                    setSelectedFiles(Array.from(e.target.files));
+                                                }
+                                            }}
+                                            className="hidden"
+                                            id="pyq-file-upload"
+                                            required
+                                        />
+                                        <label htmlFor="pyq-file-upload" className="cursor-pointer block w-full h-full">
+                                            {selectedFiles.length > 0 ? (
+                                                <div className="text-green-600 dark:text-green-400">
+                                                    <File className="w-8 h-8 mx-auto mb-2" />
+                                                    <span className="font-medium">{selectedFiles.length} file(s) selected</span>
+                                                    <div className="text-sm text-gray-500 mt-1">
+                                                        {selectedFiles.map(f => f.name).join(', ')}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="text-gray-500 dark:text-gray-400">
+                                                    <Plus className="w-8 h-8 mx-auto mb-2" />
+                                                    <p>Click to select PDF files (multiple allowed)</p>
+                                                </div>
+                                            )}
+                                        </label>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div>
+                                    <label className="block text-sm text-gray-700 dark:text-gray-300 mb-2">
+                                        <LinkIcon className="w-4 h-4 inline mr-1" />
+                                        Google Drive Folder Link
+                                    </label>
                                     <input
-                                        type="file"
-                                        accept=".pdf,application/pdf"
-                                        multiple
-                                        onChange={(e) => {
-                                            if (e.target.files && e.target.files.length > 0) {
-                                                setSelectedFiles(Array.from(e.target.files));
-                                            }
-                                        }}
-                                        className="hidden"
-                                        id="pyq-file-upload"
+                                        type="url"
+                                        value={manualLink}
+                                        onChange={(e) => setManualLink(e.target.value)}
+                                        placeholder="https://drive.google.com/drive/folders/..."
+                                        className="w-full px-4 py-3 bg-gray-100 dark:bg-gray-800 border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white font-mono text-sm"
                                         required
                                     />
-                                    <label htmlFor="pyq-file-upload" className="cursor-pointer block w-full h-full">
-                                        {selectedFiles.length > 0 ? (
-                                            <div className="text-green-600 dark:text-green-400">
-                                                <File className="w-8 h-8 mx-auto mb-2" />
-                                                <span className="font-medium">{selectedFiles.length} file(s) selected</span>
-                                                <div className="text-sm text-gray-500 mt-1">
-                                                    {selectedFiles.map(f => f.name).join(', ')}
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div className="text-gray-500 dark:text-gray-400">
-                                                <Plus className="w-8 h-8 mx-auto mb-2" />
-                                                <p>Click to select PDF files (multiple allowed)</p>
-                                            </div>
-                                        )}
-                                    </label>
+                                    <p className="text-xs text-gray-500 mt-2">
+                                        Paste the public share link of the Google Drive folder containing the PYQs.
+                                    </p>
                                 </div>
-                            </div>
+                            )}
 
                             <div className="flex gap-3 justify-end items-center">
                                 {submitting && (
@@ -348,8 +428,9 @@ export function AdminFreePYQPage({ onBack }: AdminFreePYQPageProps) {
                                 <button
                                     type="submit"
                                     disabled={submitting}
-                                    className="px-4 py-2 text-white rounded-xl hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
-                                    style={{ backgroundColor: '#16a34a' }}
+                                    className={`px-4 py-2 text-white rounded-xl hover:opacity-90 disabled:opacity-50 flex items-center gap-2 ${
+                                        uploadMode === 'file' ? 'bg-green-600' : 'bg-blue-600'
+                                    }`}
                                 >
                                     {submitting ? (
                                         <>
@@ -357,7 +438,7 @@ export function AdminFreePYQPage({ onBack }: AdminFreePYQPageProps) {
                                             Processing...
                                         </>
                                     ) : (
-                                        'Upload & Add'
+                                        uploadMode === 'file' ? 'Upload & Add' : 'Add Link'
                                     )}
                                 </button>
                             </div>

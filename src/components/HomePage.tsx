@@ -17,7 +17,10 @@ interface HomePageProps {
   onRequestNotes?: () => void;
   paymentLoading?: boolean;
   purchasingNoteId?: string | null;
+  isGuest?: boolean;
+  onKnowMore?: () => void;
 }
+
 
 export function HomePage({
   notes,
@@ -32,8 +35,12 @@ export function HomePage({
   onSearchChange,
   onRequestNotes,
   paymentLoading = false,
-  purchasingNoteId = null
+  purchasingNoteId = null,
+  isGuest = false,
+  onKnowMore
 }: HomePageProps) {
+
+
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   const categories = [
@@ -80,8 +87,8 @@ export function HomePage({
       <div className="max-w-7xl mx-auto px-4 lg:px-8 py-6">
         {/* Mobile Search Bar */}
         {onSearchChange && (
-          <div className="lg:hidden mb-6">
-            <div className="relative">
+          <div className="lg:hidden mb-6 flex gap-4">
+            <div className="relative flex-1">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-slate-500" />
               <input
                 type="text"
@@ -91,6 +98,26 @@ export function HomePage({
                 className="w-full pl-12 pr-4 py-3 glass border border-gray-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-600 focus:border-transparent text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-slate-500"
               />
             </div>
+            {isGuest && onKnowMore && (
+              <button
+                onClick={onKnowMore}
+                className="px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-medium rounded-xl whitespace-nowrap shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all"
+              >
+                Know More
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Desktop Guest Button */}
+        {isGuest && onKnowMore && (
+          <div className="hidden lg:flex justify-end mb-6">
+            <button
+              onClick={onKnowMore}
+              className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-medium rounded-xl shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all transform hover:-translate-y-0.5"
+            >
+              Know More
+            </button>
           </div>
         )}
 

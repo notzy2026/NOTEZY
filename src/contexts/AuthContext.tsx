@@ -15,6 +15,8 @@ interface AuthContextType {
   userProfile: UserProfile | null;
   isAuthenticated: boolean;
   isGuest: boolean;
+  isNewUser: boolean;
+  setIsNewUser: (isNew: boolean) => void;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signup: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
@@ -24,6 +26,7 @@ interface AuthContextType {
   exitGuestMode: () => void;
 }
 
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -31,6 +34,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isGuest, setIsGuest] = useState(true); // Default to guest mode - take users directly to dashboard
+  const [isNewUser, setIsNewUser] = useState(false);
+
 
   // Listen to auth state changes
   useEffect(() => {
@@ -101,7 +106,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Fetch the newly created profile
       const profile = await getUserProfile(userCredential.user.uid);
       setUserProfile(profile);
+      setUserProfile(profile);
       setIsGuest(false);
+      setIsNewUser(true);
+
 
       return { success: true };
     } catch (error: any) {
@@ -131,6 +139,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         userProfile,
         isAuthenticated: !!user,
         isGuest,
+        isNewUser,
+        setIsNewUser,
         isLoading,
         login,
         signup,

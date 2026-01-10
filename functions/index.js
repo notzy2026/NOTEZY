@@ -43,18 +43,19 @@ exports.createRazorpayOrder = onCall(functionOptions, async (request) => {
         throw new HttpsError('invalid-argument', 'Note ID and amount are required');
     }
 
-    // Check if already purchased
-    const existingPurchase = await db.collection('purchases')
-        .where('userId', '==', userId)
-        .where('noteId', '==', noteId)
-        .get();
+    // Run checks in parallel to save time
+    const [existingPurchase, noteDoc] = await Promise.all([
+        db.collection('purchases')
+            .where('userId', '==', userId)
+            .where('noteId', '==', noteId)
+            .get(),
+        db.collection('notes').doc(noteId).get()
+    ]);
 
     if (!existingPurchase.empty) {
         throw new HttpsError('already-exists', 'You have already purchased this note');
     }
 
-    // Get note details for receipt
-    const noteDoc = await db.collection('notes').doc(noteId).get();
     if (!noteDoc.exists) {
         throw new HttpsError('not-found', 'Note not found');
     }
@@ -194,7 +195,7 @@ exports.verifyRazorpayPayment = onCall(functionOptions, async (request) => {
 
 // ============ GOOGLE DRIVE INTEGRATION ============
 
-const { google } = require('googleapis');
+// const { google } = require('googleapis'); // Moved to lazy load
 
 // Lazy initialization of Google Drive API
 let driveInstance = null;
@@ -211,6 +212,7 @@ function getAuthClient() {
             throw new Error('Google OAuth credentials missing');
         }
 
+        const { google } = require('googleapis');
         authClient = new google.auth.OAuth2(clientId, clientSecret);
         authClient.setCredentials({ refresh_token: refreshToken });
     }
@@ -219,6 +221,7 @@ function getAuthClient() {
 
 function getDrive() {
     if (!driveInstance) {
+        const { google } = require('googleapis');
         const auth = getAuthClient();
         driveInstance = google.drive({ version: 'v3', auth });
     }
