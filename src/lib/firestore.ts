@@ -12,7 +12,9 @@ import {
     orderBy,
     Timestamp,
     increment,
+    connectFirestoreEmulator,
 } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from './firebase';
 import { Note, UserProfile, NoteCategory, SupportChat, ChatMessage, Review, PayoutRequest, NoteRequest, FreePYQ, Course, Notification, NotificationType } from '../types';
 
@@ -674,27 +676,20 @@ export async function createPayoutRequest(
     upiId: string,
     grossAmount: number
 ): Promise<string> {
-    const platformFee = await getPlatformFee();
-    const netAmount = grossAmount * (1 - platformFee / 100);
+    const functions = getFunctions(undefined, 'asia-south1');
+    const createPayout = httpsCallable(functions, 'createPayoutRequest');
 
-    const docRef = await addDoc(payoutsCollection, {
-        userId,
-        userName,
-        userEmail,
-        upiId,
-        grossAmount,
-        platformFee,
-        netAmount,
-        status: 'pending',
-        requestedAt: Timestamp.now(),
-    });
-
-    // Mark user as having pending payout
-    await updateDoc(doc(usersCollection, userId), {
-        pendingPayout: true,
-    });
-
-    return docRef.id;
+    try {
+        const result = await createPayout({
+            upiId,
+            grossAmount
+        });
+        const data = result.data as { success: boolean; payoutId: string };
+        return data.payoutId;
+    } catch (error: any) {
+        console.error('Error creating payout request:', error);
+        throw new Error(error.message || 'Failed to create payout request');
+    }
 }
 
 export async function getPendingPayouts(): Promise<PayoutRequest[]> {
@@ -747,37 +742,15 @@ export async function getAllPayouts(): Promise<PayoutRequest[]> {
 }
 
 export async function markPayoutComplete(requestId: string): Promise<void> {
-    // Get the payout request
-    const payoutDoc = await getDoc(doc(payoutsCollection, requestId));
-    if (!payoutDoc.exists()) {
-        throw new Error('Payout request not found');
+    const functions = getFunctions(undefined, 'asia-south1');
+    const markComplete = httpsCallable(functions, 'markPayoutComplete');
+
+    try {
+        await markComplete({ payoutId: requestId });
+    } catch (error: any) {
+        console.error('Error marking payout complete:', error);
+        throw new Error(error.message || 'Failed to complete payout');
     }
-
-    const payoutData = payoutDoc.data();
-    const userId = payoutData.userId;
-    const netAmount = payoutData.netAmount;
-
-    // Update payout status
-    await updateDoc(doc(payoutsCollection, requestId), {
-        status: 'completed',
-        completedAt: Timestamp.now(),
-    });
-
-    // Reset user earnings to 0 and clear pending flag
-    await updateDoc(doc(usersCollection, userId), {
-        totalEarnings: 0,
-        pendingPayout: false,
-    });
-
-    // Notify the user about payout completion
-    await createNotification({
-        userId: userId,
-        type: 'payout',
-        title: 'Payout Completed! 💰',
-        message: `Your payout of ₹${netAmount.toFixed(2)} has been sent to your UPI ID`,
-        linkTo: 'earnings',
-        relatedId: requestId,
-    });
 }
 
 export async function getUserPayoutStatus(userId: string): Promise<PayoutRequest | null> {

@@ -437,3 +437,167 @@ exports.getDriveAccessToken = onCall(functionOptions, async (request) => {
         throw new HttpsError('internal', 'Failed to get access token: ' + error.message);
     }
 });
+
+/**
+ * Create Payout Request
+ * Securely handles payout creation to avoid permission errors and tampering
+ */
+exports.createPayoutRequest = onCall(functionOptions, async (request) => {
+    // 1. Verify Authentication
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in to request payout');
+    }
+
+    const { upiId, grossAmount } = request.data;
+    const userId = request.auth.uid;
+    const userEmail = request.auth.token.email || '';
+    const userName = request.auth.token.name || 'User';
+
+    // 2. Validate Input
+    if (!upiId || !grossAmount) {
+        throw new HttpsError('invalid-argument', 'UPI ID and amount are required');
+    }
+
+    if (grossAmount <= 0) {
+        throw new HttpsError('invalid-argument', 'Amount must be greater than 0');
+    }
+
+    try {
+        // 3. Get User Profile to verify earnings (Double Check)
+        const userDoc = await db.collection('users').doc(userId).get();
+        if (!userDoc.exists) {
+            throw new HttpsError('not-found', 'User not found');
+        }
+
+        const userData = userDoc.data();
+        if (userData.totalEarnings < grossAmount) {
+            throw new HttpsError('failed-precondition', 'Insufficient earnings');
+        }
+
+        if (userData.pendingPayout) {
+            throw new HttpsError('already-exists', 'You already have a pending payout request');
+        }
+
+        // 4. Get Platform Fee
+        const settingsDoc = await db.collection('settings').doc('platform').get();
+        const platformFee = settingsDoc.exists ? (settingsDoc.data().platformFee || 30) : 30;
+
+        // 5. Calculate Net Amount
+        const netAmount = grossAmount * (1 - platformFee / 100);
+
+        const batch = db.batch();
+
+        // 6. Create Payout Request
+        const payoutRef = db.collection('payouts').doc();
+        batch.set(payoutRef, {
+            userId,
+            userName: userData.name || userName,
+            userEmail: userData.email || userEmail,
+            upiId,
+            grossAmount,
+            platformFee,
+            netAmount,
+            status: 'pending',
+            requestedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        // 7. Update User Status
+        const userRef = db.collection('users').doc(userId);
+        batch.update(userRef, {
+            pendingPayout: true,
+        });
+
+        await batch.commit();
+
+        return { success: true, payoutId: payoutRef.id };
+
+    } catch (error) {
+        console.error('Error creating payout request:', error);
+        throw new HttpsError('internal', 'Failed to create payout request: ' + error.message);
+    }
+});
+
+/**
+ * Mark Payout as Complete (Admin Only)
+ * Securely handles payout completion with admin verification
+ */
+exports.markPayoutComplete = onCall(functionOptions, async (request) => {
+    // 1. Verify Authentication
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in');
+    }
+
+    const { payoutId } = request.data;
+    const adminUserId = request.auth.uid;
+
+    // 2. Validate Input
+    if (!payoutId) {
+        throw new HttpsError('invalid-argument', 'Payout ID is required');
+    }
+
+    try {
+        // 3. Verify the user is an admin
+        const adminDoc = await db.collection('users').doc(adminUserId).get();
+        if (!adminDoc.exists || !adminDoc.data().isAdmin) {
+            throw new HttpsError('permission-denied', 'Only admins can complete payouts');
+        }
+
+        // 4. Get the payout request
+        const payoutDoc = await db.collection('payouts').doc(payoutId).get();
+        if (!payoutDoc.exists) {
+            throw new HttpsError('not-found', 'Payout request not found');
+        }
+
+        const payoutData = payoutDoc.data();
+
+        // 5. Check if already completed
+        if (payoutData.status === 'completed') {
+            throw new HttpsError('already-exists', 'Payout already completed');
+        }
+
+        const userId = payoutData.userId;
+        const netAmount = payoutData.netAmount;
+
+        // 6. Use batch write to update everything atomically
+        const batch = db.batch();
+
+        // Update payout status
+        const payoutRef = db.collection('payouts').doc(payoutId);
+        batch.update(payoutRef, {
+            status: 'completed',
+            completedAt: admin.firestore.FieldValue.serverTimestamp(),
+            completedBy: adminUserId,
+        });
+
+        // Reset user earnings to 0 and clear pending flag
+        const userRef = db.collection('users').doc(userId);
+        batch.update(userRef, {
+            totalEarnings: 0,
+            pendingPayout: false,
+        });
+
+        // Create notification for the user
+        const notificationRef = db.collection('notifications').doc();
+        batch.set(notificationRef, {
+            userId: userId,
+            type: 'payout',
+            title: 'Payout Completed! 💰',
+            message: `Your payout of ₹${netAmount.toFixed(2)} has been sent to your UPI ID`,
+            linkTo: 'earnings',
+            relatedId: payoutId,
+            isRead: false,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        await batch.commit();
+
+        return { success: true, message: 'Payout marked as complete' };
+
+    } catch (error) {
+        console.error('Error marking payout complete:', error);
+        if (error.code) {
+            throw error; // Re-throw HttpsError
+        }
+        throw new HttpsError('internal', 'Failed to complete payout: ' + error.message);
+    }
+});
