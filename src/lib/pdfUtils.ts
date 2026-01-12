@@ -62,3 +62,17 @@ export async function extractPdfPreviews(
     console.log(`Extracted ${previewFiles.length} preview pages`);
     return previewFiles;
 }
+
+/**
+ * Get the total number of pages in a PDF file
+ */
+export async function getPdfPageCount(file: File): Promise<number> {
+    try {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        return pdf.numPages;
+    } catch (error) {
+        console.error('Error getting PDF page count:', error);
+        return 0;
+    }
+}

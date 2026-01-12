@@ -12,6 +12,7 @@ export interface Note {
   previewPages: string[];
   thumbnailUrl: string;
   pdfUrls?: string[];
+  totalPages?: number;
   uploaderId: string;
   uploaderName: string;
   uploadDate: string;

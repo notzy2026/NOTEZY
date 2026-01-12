@@ -109,6 +109,7 @@ export async function getNotes(): Promise<Note[]> {
                 isDeleted: data.isDeleted || false,
                 isTopSelling: data.isTopSelling || false,
                 isVerified: data.isVerified || false,
+                totalPages: data.totalPages || 0,
             };
         })
         .filter(note => !note.isDeleted); // Filter out soft-deleted notes
@@ -151,6 +152,7 @@ export async function getNoteById(noteId: string): Promise<Note | null> {
         isDeleted: data.isDeleted || false,
         isTopSelling: data.isTopSelling || false,
         isVerified: data.isVerified || false,
+        totalPages: data.totalPages || 0,
     };
 }
 
@@ -162,6 +164,7 @@ export async function createNote(noteData: {
     previewPages: string[];
     thumbnailUrl: string;
     pdfUrls: string[];
+    totalPages?: number;
     uploaderId: string;
     uploaderName: string;
 }): Promise<string> {
@@ -201,6 +204,7 @@ export async function getUserUploadedNotes(uid: string): Promise<Note[]> {
             isDeleted: data.isDeleted || false,
             isTopSelling: data.isTopSelling || false,
             isVerified: data.isVerified || false,
+            totalPages: data.totalPages || 0,
         };
     });
 }

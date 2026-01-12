@@ -1,4 +1,4 @@
-import { X, Star, ChevronLeft, ChevronRight, User, Download, File, ShoppingCart, Loader2 } from 'lucide-react';
+import { X, Star, ChevronLeft, ChevronRight, User, Download, File, ShoppingCart, Loader2, BookOpen } from 'lucide-react';
 import { Note, Review } from '../types';
 import { useState, useEffect } from 'react';
 import { getReviewsForNote, hasUserReviewedNote, addReview, isNotePurchased } from '../lib/firestore';
@@ -225,6 +225,18 @@ export function NotePreviewModal({ note, onClose, onPurchase, paymentLoading = f
               <div className="text-white text-opacity-90 text-sm mb-1">Category</div>
               <div className="text-white text-xl capitalize">{note.category}</div>
             </div>
+            {note.totalPages !== undefined && note.totalPages > 0 && (
+              <div
+                className="p-4 rounded-xl shadow-lg"
+                style={{ background: 'linear-gradient(to bottom right, #6366f1, #4f46e5)' }}
+              >
+                <div className="text-white font-medium text-sm mb-1">Total Pages</div>
+                <div className="flex items-center gap-1">
+                  <BookOpen className="w-4 h-4 text-white" />
+                  <span className="text-xl text-white font-bold">{note.totalPages}</span>
+                </div>
+              </div>
+            )}
             {note.pdfUrls && note.pdfUrls.length > 0 && (
               <div className="bg-gradient-to-br from-pink-500 to-rose-600 p-4 rounded-xl shadow-lg">
                 <div className="text-white text-opacity-90 text-sm mb-1">Files</div>

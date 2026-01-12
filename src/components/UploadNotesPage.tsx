@@ -4,7 +4,7 @@ import { NoteCategory, Course } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { createNote, getCourses, addCourse } from '../lib/firestore';
 import { uploadNotePreview, uploadNoteFile } from '../lib/storage';
-import { extractPdfPreviews } from '../lib/pdfUtils';
+import { extractPdfPreviews, getPdfPageCount } from '../lib/pdfUtils';
 import { compressPdf, formatFileSize, CompressionResult } from '../lib/compressPdf';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
@@ -192,6 +192,14 @@ export function UploadNotesPage() {
           previewUrls.push(url);
         }
 
+        // Count total pages across all PDFs
+        setUploadProgress('Counting pages...');
+        let totalPages = 0;
+        for (const pdfFile of pdfFiles) {
+          const pageCount = await getPdfPageCount(pdfFile);
+          totalPages += pageCount;
+        }
+
         // Create note document in Firestore
         setUploadProgress('Creating note...');
         await createNote({
@@ -202,8 +210,7 @@ export function UploadNotesPage() {
           previewPages: previewUrls,
           thumbnailUrl: previewUrls[0] || '',
           pdfUrls,
-          uploaderId: user.uid,
-          uploaderName: userProfile.name,
+          totalPages,
           uploaderId: user.uid,
           uploaderName: userProfile.name,
         });
@@ -257,7 +264,9 @@ export function UploadNotesPage() {
       setExtracting(true);
       setError('');
       try {
-        const previews = await extractPdfPreviews(files[0], 4);
+        // For assignments, only extract 1 preview page; for lecture-notes, extract 4 pages
+        const maxPreviewPages = category === 'assignment' ? 1 : 4;
+        const previews = await extractPdfPreviews(files[0], maxPreviewPages);
         setPreviewFiles(previews);
       } catch (err) {
         console.error('Error extracting previews:', err);
@@ -282,7 +291,8 @@ export function UploadNotesPage() {
     if (indexToRemove === 0 && newFiles.length > 0 && category !== 'pyq') {
       setExtracting(true);
       try {
-        const previews = await extractPdfPreviews(newFiles[0], 4);
+        const maxPreviewPages = category === 'assignment' ? 1 : 4;
+        const previews = await extractPdfPreviews(newFiles[0], maxPreviewPages);
         setPreviewFiles(previews);
       } catch (err) {
         console.error('Error extracting previews:', err);
@@ -322,7 +332,8 @@ export function UploadNotesPage() {
     if (firstFileChanged && category !== 'pyq') {
       setExtracting(true);
       try {
-        const previews = await extractPdfPreviews(newFiles[0], 4);
+        const maxPreviewPages = category === 'assignment' ? 1 : 4;
+        const previews = await extractPdfPreviews(newFiles[0], maxPreviewPages);
         setPreviewFiles(previews);
       } catch (err) {
         console.error('Error extracting previews:', err);
@@ -641,7 +652,7 @@ export function UploadNotesPage() {
                   </div>
                 ) : (
                   <p className="text-gray-500 dark:text-gray-400 text-sm">
-                    Upload a PDF above - the first 4 pages will be automatically extracted as previews
+                    Upload a PDF above - {category === 'assignment' ? 'the first page will be' : 'the first 4 pages will be'} automatically extracted as preview{category === 'assignment' ? '' : 's'}
                   </p>
                 )}
               </div>
@@ -673,7 +684,7 @@ export function UploadNotesPage() {
           <h3 className="text-blue-900 dark:text-blue-200 mb-3">Upload Guidelines</h3>
           <ul className="space-y-2 text-blue-800 dark:text-blue-300 text-sm">
             <li>• Only PDF files are supported</li>
-            <li>• Preview images are automatically extracted from your PDF (first 4 pages)</li>
+            <li>• Preview images are automatically extracted from your PDF (1 page for assignments, 4 pages for lecture notes)</li>
             <li>• Ensure your notes are original or you have permission to sell them</li>
             <li>• Write an accurate description of what's included</li>
             <li>• Price your notes fairly based on content quality and length</li>
