@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { X, Download, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, FileText, ExternalLink, Loader2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Note } from '../types';
+import { ShareButton } from './ShareButton';
 
 interface NotesViewerProps {
   note: Note;
@@ -97,6 +98,7 @@ export function NotesViewer({ note, onClose }: NotesViewerProps) {
           </div>
 
           <div className="flex items-center gap-2">
+            <ShareButton noteId={note.id} noteTitle={note.title} className="bg-slate-800 hover:bg-slate-700" />
             {hasMultipleFiles ? (
               <Button
                 onClick={handleDownloadAll}

@@ -521,6 +521,93 @@ exports.createPayoutRequest = onCall(functionOptions, async (request) => {
  * Mark Payout as Complete (Admin Only)
  * Securely handles payout completion with admin verification
  */
+/**
+ * Fulfill Note Request
+ * Called when a user uploads notes to fulfill a community request
+ * Uses admin SDK to bypass security rules since users can't update others' requests
+ */
+exports.fulfillNoteRequest = onCall(functionOptions, async (request) => {
+    // 1. Verify Authentication
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in to fulfill a request');
+    }
+
+    const { requestId, noteId } = request.data;
+    const fulfillerId = request.auth.uid;
+
+    // 2. Validate Input
+    if (!requestId || !noteId) {
+        throw new HttpsError('invalid-argument', 'Request ID and Note ID are required');
+    }
+
+    try {
+        // 3. Get the request to verify it exists and is pending
+        const requestDoc = await db.collection('noteRequests').doc(requestId).get();
+        if (!requestDoc.exists) {
+            throw new HttpsError('not-found', 'Request not found');
+        }
+
+        const requestData = requestDoc.data();
+
+        // 4. Check if request is still pending
+        if (requestData.status !== 'pending') {
+            throw new HttpsError('failed-precondition', 'This request has already been fulfilled or closed');
+        }
+
+        // 5. Get the note to verify it exists
+        const noteDoc = await db.collection('notes').doc(noteId).get();
+        if (!noteDoc.exists) {
+            throw new HttpsError('not-found', 'Note not found');
+        }
+
+        const noteData = noteDoc.data();
+
+        // 6. Get fulfiller name
+        const fulfillerDoc = await db.collection('users').doc(fulfillerId).get();
+        const fulfillerName = fulfillerDoc.exists ? fulfillerDoc.data().name : 'A user';
+
+        const batch = db.batch();
+
+        // 7. Update the request status
+        const requestRef = db.collection('noteRequests').doc(requestId);
+        batch.update(requestRef, {
+            status: 'fulfilled',
+            fulfilledBy: fulfillerId,
+            fulfillerName: fulfillerName,
+            fulfilledNoteId: noteId,
+            fulfilledAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        // 8. Create notification for the original requester
+        const notificationRef = db.collection('notifications').doc();
+        batch.set(notificationRef, {
+            userId: requestData.userId,
+            type: 'system',
+            title: 'Request Fulfilled! 🎉',
+            message: `${fulfillerName} has uploaded "${noteData.title}" in response to your request "${requestData.title}"`,
+            linkTo: 'requests',
+            relatedId: noteId,
+            isRead: false,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        await batch.commit();
+
+        return {
+            success: true,
+            message: 'Request fulfilled successfully',
+            noteId: noteId
+        };
+
+    } catch (error) {
+        console.error('Error fulfilling request:', error);
+        if (error.code) {
+            throw error; // Re-throw HttpsError
+        }
+        throw new HttpsError('internal', 'Failed to fulfill request: ' + error.message);
+    }
+});
+
 exports.markPayoutComplete = onCall(functionOptions, async (request) => {
     // 1. Verify Authentication
     if (!request.auth) {
@@ -599,5 +686,134 @@ exports.markPayoutComplete = onCall(functionOptions, async (request) => {
             throw error; // Re-throw HttpsError
         }
         throw new HttpsError('internal', 'Failed to complete payout: ' + error.message);
+    }
+});
+
+/**
+ * Create Note Request with Broadcast Notification
+ * Creates a new note request and notifies all users so they can fulfill it
+ */
+exports.createNoteRequestWithNotification = onCall(functionOptions, async (request) => {
+    // 1. Verify Authentication
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in to create a request');
+    }
+
+    const { title, description, category } = request.data;
+    const userId = request.auth.uid;
+
+    // 2. Validate Input
+    if (!title || !description || !category) {
+        throw new HttpsError('invalid-argument', 'Title, description, and category are required');
+    }
+
+    try {
+        // 3. Get user details
+        const userDoc = await db.collection('users').doc(userId).get();
+        const userData = userDoc.exists ? userDoc.data() : {};
+        const userName = userData.name || 'A user';
+        const userEmail = userData.email || '';
+
+        // 4. Create the request
+        const requestRef = await db.collection('noteRequests').add({
+            userId,
+            userName,
+            userEmail,
+            title,
+            description,
+            category,
+            status: 'pending',
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        // 5. Get all users to notify (excluding the requester)
+        const usersSnapshot = await db.collection('users').get();
+        const batch = db.batch();
+        let notificationCount = 0;
+
+        usersSnapshot.docs.forEach((doc) => {
+            // Don't notify the user who created the request
+            if (doc.id !== userId) {
+                const notificationRef = db.collection('notifications').doc();
+                batch.set(notificationRef, {
+                    userId: doc.id,
+                    type: 'request',
+                    title: 'New Note Request! 📚',
+                    message: `${userName} is looking for: "${title}"`,
+                    linkTo: 'requests',
+                    relatedId: requestRef.id,
+                    isRead: false,
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                notificationCount++;
+            }
+        });
+
+        // 6. Commit all notifications
+        if (notificationCount > 0) {
+            await batch.commit();
+        }
+
+        console.log(`Created request ${requestRef.id} and notified ${notificationCount} users`);
+
+        return {
+            success: true,
+            requestId: requestRef.id,
+            notifiedUsers: notificationCount
+        };
+
+    } catch (error) {
+        console.error('Error creating request with notification:', error);
+        if (error.code) {
+            throw error;
+        }
+        throw new HttpsError('internal', 'Failed to create request: ' + error.message);
+    }
+});
+
+/**
+ * Delete Note Request (Admin Only)
+ * Allows admins to permanently delete any note request
+ */
+exports.deleteNoteRequest = onCall(functionOptions, async (request) => {
+    // 1. Verify Authentication
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'User must be logged in');
+    }
+
+    const { requestId } = request.data;
+    const adminUserId = request.auth.uid;
+
+    // 2. Validate Input
+    if (!requestId) {
+        throw new HttpsError('invalid-argument', 'Request ID is required');
+    }
+
+    try {
+        // 3. Verify the user is an admin
+        const adminDoc = await db.collection('users').doc(adminUserId).get();
+        if (!adminDoc.exists || !adminDoc.data().isAdmin) {
+            throw new HttpsError('permission-denied', 'Only admins can delete requests');
+        }
+
+        // 4. Check if the request exists
+        const requestDoc = await db.collection('noteRequests').doc(requestId).get();
+        if (!requestDoc.exists) {
+            throw new HttpsError('not-found', 'Request not found');
+        }
+
+        // 5. Delete the request
+        await db.collection('noteRequests').doc(requestId).delete();
+
+        console.log(`Admin ${adminUserId} deleted request ${requestId}`);
+
+        return { success: true, message: 'Request deleted successfully' };
+
+    } catch (error) {
+        console.error('Error deleting request:', error);
+        if (error.code) {
+            throw error; // Re-throw HttpsError
+        }
+        throw new HttpsError('internal', 'Failed to delete request: ' + error.message);
     }
 });

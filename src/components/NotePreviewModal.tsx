@@ -3,6 +3,7 @@ import { Note, Review } from '../types';
 import { useState, useEffect } from 'react';
 import { getReviewsForNote, hasUserReviewedNote, addReview, isNotePurchased } from '../lib/firestore';
 import { useAuth } from '../contexts/AuthContext';
+import { ShareButton } from './ShareButton';
 
 interface NotePreviewModalProps {
   note: Note;
@@ -122,12 +123,15 @@ export function NotePreviewModal({ note, onClose, onPurchase, paymentLoading = f
       <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
         <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 p-4 lg:p-6 flex items-center justify-between z-10 rounded-t-2xl">
           <h2 className="text-gray-900 dark:text-white pr-8">{note.title}</h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors flex-shrink-0"
-          >
-            <X className="w-6 h-6 text-gray-700 dark:text-gray-300" />
-          </button>
+          <div className="flex items-center gap-2">
+            <ShareButton noteId={note.id} noteTitle={note.title} />
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors flex-shrink-0"
+            >
+              <X className="w-6 h-6 text-gray-700 dark:text-gray-300" />
+            </button>
+          </div>
         </div>
 
         <div className="p-4 lg:p-6">

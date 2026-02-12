@@ -1,7 +1,8 @@
-import { Star, ArrowLeft, Search, TrendingUp, CheckCircle, Trash2, ShieldCheck, Download } from 'lucide-react';
+import { Star, ArrowLeft, Search, TrendingUp, CheckCircle, Trash2, ShieldCheck, Download, Eye } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Note } from '../types';
 import { getNotes, setNoteTopSelling, setNoteVerified, deleteNote } from '../lib/firestore';
+import { NotePreviewModal } from './NotePreviewModal';
 
 interface AdminNotesPageProps {
     onBack: () => void;
@@ -13,6 +14,7 @@ export function AdminNotesPage({ onBack }: AdminNotesPageProps) {
     const [searchQuery, setSearchQuery] = useState('');
     const [updating, setUpdating] = useState<string | null>(null);
     const [deleting, setDeleting] = useState<string | null>(null);
+    const [viewingNote, setViewingNote] = useState<Note | null>(null);
 
     useEffect(() => {
         loadNotes();
@@ -175,6 +177,15 @@ export function AdminNotesPage({ onBack }: AdminNotesPageProps) {
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex gap-2">
+                                                {/* View Button */}
+                                                <button
+                                                    onClick={() => setViewingNote(note)}
+                                                    className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-all"
+                                                    title="View note details & files"
+                                                >
+                                                    <Eye className="w-5 h-5" />
+                                                </button>
+
                                                 {/* Verify Button */}
                                                 <button
                                                     onClick={() => toggleVerified(note.id, note.isVerified || false)}
@@ -244,6 +255,14 @@ export function AdminNotesPage({ onBack }: AdminNotesPageProps) {
                         </div>
                     )}
                 </div>
+
+                {/* Note Preview Modal */}
+                {viewingNote && (
+                    <NotePreviewModal
+                        note={viewingNote}
+                        onClose={() => setViewingNote(null)}
+                    />
+                )}
             </div>
         </div>
     );

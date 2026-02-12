@@ -105,14 +105,19 @@ export interface NoteRequest {
   title: string;
   description: string;
   category: NoteCategory;
-  status: 'pending' | 'responded' | 'closed';
+  status: 'pending' | 'responded' | 'closed' | 'fulfilled';
   createdAt: string;
   response?: string;
   responseLink?: string;
   respondedAt?: string;
+  // Fulfillment fields
+  fulfilledBy?: string;
+  fulfillerName?: string;
+  fulfilledNoteId?: string;
+  fulfilledAt?: string;
 }
 
-export type NotificationType = 'purchase' | 'review' | 'payout' | 'system';
+export type NotificationType = 'purchase' | 'review' | 'payout' | 'system' | 'request';
 
 export interface Notification {
   id: string;
@@ -124,4 +129,13 @@ export interface Notification {
   createdAt: string;
   linkTo?: string; // Optional page to navigate to
   relatedId?: string; // Related note/payout ID
+}
+
+export interface Announcement {
+  id: string;
+  title: string;
+  message: string;
+  createdAt: string;
+  createdBy: string;
+  authorName: string;
 }

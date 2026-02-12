@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { Bell, Check, CheckCheck, ShoppingBag, Star, Wallet, Info, X } from 'lucide-react';
+import { Bell, Check, CheckCheck, ShoppingBag, Star, Wallet, Info, X, FileQuestion } from 'lucide-react';
 import { Notification, NotificationType } from '../types';
-import { getUserNotifications, markNotificationRead, markAllNotificationsRead } from '../lib/firestore';
+import { subscribeToNotifications, markNotificationRead, markAllNotificationsRead } from '../lib/firestore';
 import { useAuth } from '../contexts/AuthContext';
 
 interface NotificationsDropdownProps {
@@ -12,15 +12,27 @@ export function NotificationsDropdown({ onNavigate }: NotificationsDropdownProps
     const { user } = useAuth();
     const [isOpen, setIsOpen] = useState(false);
     const [notifications, setNotifications] = useState<Notification[]>([]);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
     const unreadCount = notifications.filter(n => !n.isRead).length;
 
+    // Real-time subscription to notifications
     useEffect(() => {
-        if (user?.uid) {
-            loadNotifications();
+        if (!user?.uid) {
+            setNotifications([]);
+            setLoading(false);
+            return;
         }
+
+        setLoading(true);
+        const unsubscribe = subscribeToNotifications(user.uid, (notifs) => {
+            setNotifications(notifs);
+            setLoading(false);
+        });
+
+        // Cleanup subscription on unmount
+        return () => unsubscribe();
     }, [user?.uid]);
 
     // Close dropdown when clicking outside
@@ -33,19 +45,6 @@ export function NotificationsDropdown({ onNavigate }: NotificationsDropdownProps
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
-
-    async function loadNotifications() {
-        if (!user?.uid) return;
-        setLoading(true);
-        try {
-            const notifs = await getUserNotifications(user.uid);
-            setNotifications(notifs);
-        } catch (error) {
-            console.error('Error loading notifications:', error);
-        } finally {
-            setLoading(false);
-        }
-    }
 
     async function handleMarkAsRead(notificationId: string) {
         try {
@@ -84,6 +83,8 @@ export function NotificationsDropdown({ onNavigate }: NotificationsDropdownProps
                 return <Star className="w-5 h-5 text-yellow-500" />;
             case 'payout':
                 return <Wallet className="w-5 h-5 text-purple-500" />;
+            case 'request':
+                return <FileQuestion className="w-5 h-5 text-orange-500" />;
             default:
                 return <Info className="w-5 h-5 text-blue-500" />;
         }

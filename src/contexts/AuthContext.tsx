@@ -24,6 +24,8 @@ interface AuthContextType {
   refreshUserProfile: () => Promise<void>;
   enterGuestMode: () => void;
   exitGuestMode: () => void;
+  returnUrl: string | null;
+  setReturnUrl: (url: string | null) => void;
 }
 
 
@@ -35,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isGuest, setIsGuest] = useState(true); // Default to guest mode - take users directly to dashboard
   const [isNewUser, setIsNewUser] = useState(false);
+  const [returnUrl, setReturnUrl] = useState<string | null>(null);
 
 
   // Listen to auth state changes
@@ -148,6 +151,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refreshUserProfile,
         enterGuestMode,
         exitGuestMode,
+        returnUrl,
+        setReturnUrl,
       }}
     >
       {children}

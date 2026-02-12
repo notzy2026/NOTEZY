@@ -1,7 +1,7 @@
-import { FileQuestion, ArrowLeft, Search, Clock, CheckCircle, Send, X, Link, ExternalLink } from 'lucide-react';
+import { FileQuestion, ArrowLeft, Search, Clock, CheckCircle, Send, X, Link, ExternalLink, Trash2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { NoteRequest } from '../types';
-import { getAllNoteRequests, respondToNoteRequest, closeNoteRequest } from '../lib/firestore';
+import { getAllNoteRequests, respondToNoteRequest, closeNoteRequest, deleteNoteRequest } from '../lib/firestore';
 
 interface AdminRequestsPageProps {
     onBack: () => void;
@@ -16,6 +16,7 @@ export function AdminRequestsPage({ onBack }: AdminRequestsPageProps) {
     const [submitting, setSubmitting] = useState(false);
     const [filter, setFilter] = useState<'all' | 'pending' | 'responded'>('pending');
     const [searchQuery, setSearchQuery] = useState('');
+    const [deletingId, setDeletingId] = useState<string | null>(null);
 
     useEffect(() => {
         loadRequests();
@@ -60,6 +61,17 @@ export function AdminRequestsPage({ onBack }: AdminRequestsPageProps) {
             ));
         } catch (error) {
             console.error('Error closing request:', error);
+        }
+    }
+
+    async function handleDelete(requestId: string) {
+        try {
+            await deleteNoteRequest(requestId);
+            setRequests(prev => prev.filter(r => r.id !== requestId));
+            setDeletingId(null);
+        } catch (error) {
+            console.error('Error deleting request:', error);
+            alert('Failed to delete request');
         }
     }
 
@@ -193,6 +205,13 @@ export function AdminRequestsPage({ onBack }: AdminRequestsPageProps) {
                                             Close Request
                                         </button>
                                     )}
+                                    <button
+                                        onClick={() => setDeletingId(request.id)}
+                                        className="px-4 py-2 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg flex items-center gap-2 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                        Delete
+                                    </button>
                                 </div>
                             </div>
                         ))}
@@ -256,6 +275,41 @@ export function AdminRequestsPage({ onBack }: AdminRequestsPageProps) {
                                     {submitting ? 'Sending...' : 'Send Response'}
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {deletingId && (
+                <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-md w-full shadow-2xl p-6">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                                <Trash2 className="w-6 h-6 text-red-600 dark:text-red-400" />
+                            </div>
+                            <div>
+                                <h2 className="text-xl text-gray-900 dark:text-white font-semibold">Delete Request</h2>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">This action cannot be undone</p>
+                            </div>
+                        </div>
+                        <p className="text-gray-600 dark:text-gray-400 mb-6">
+                            Are you sure you want to permanently delete this request? The user will no longer see it.
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setDeletingId(null)}
+                                className="flex-1 py-3 bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => handleDelete(deletingId)}
+                                className="flex-1 py-3 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+                            >
+                                <Trash2 className="w-5 h-5" />
+                                Delete
+                            </button>
                         </div>
                     </div>
                 </div>

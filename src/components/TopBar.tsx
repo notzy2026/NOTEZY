@@ -1,6 +1,7 @@
 import { Search, User, Upload } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { NotificationsDropdown } from './NotificationsDropdown';
+import { AnnouncementsDropdown } from './AnnouncementsDropdown';
 
 interface TopBarProps {
   searchQuery: string;
@@ -39,6 +40,7 @@ export function TopBar({ searchQuery, onSearchChange, showSearch = true, onNavig
             <span className="font-medium">Upload</span>
           </button>
 
+          <AnnouncementsDropdown />
           <NotificationsDropdown onNavigate={onNavigate} />
 
           <div className="flex items-center gap-3 pl-3 border-l border-gray-200 dark:border-gray-700">

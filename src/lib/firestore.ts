@@ -13,10 +13,13 @@ import {
     Timestamp,
     increment,
     connectFirestoreEmulator,
+    onSnapshot,
+    limit,
+    startAfter, // Added startAfter as per instruction's Code Edit snippet
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from './firebase';
-import { Note, UserProfile, NoteCategory, SupportChat, ChatMessage, Review, PayoutRequest, NoteRequest, FreePYQ, Course, Notification, NotificationType } from '../types';
+import { Note, UserProfile, NoteCategory, SupportChat, ChatMessage, Review, PayoutRequest, NoteRequest, FreePYQ, Course, Notification, NotificationType, Announcement } from '../types';
 
 // Collection references
 const usersCollection = collection(db, 'users');
@@ -29,6 +32,7 @@ const noteRequestsCollection = collection(db, 'noteRequests');
 const freePYQsCollection = collection(db, 'freePYQs');
 const coursesCollection = collection(db, 'courses');
 const notificationsCollection = collection(db, 'notifications');
+const announcementsCollection = collection(db, 'announcements');
 const settingsDoc = doc(db, 'settings', 'platform');
 
 // ============ USER FUNCTIONS ============
@@ -785,8 +789,7 @@ export async function getUserPayoutStatus(userId: string): Promise<PayoutRequest
     };
 }
 
-// ============ NOTE REQUEST FUNCTIONS ============
-
+// Create a new note request with broadcast notification to all users
 export async function createNoteRequest(
     userId: string,
     userName: string,
@@ -795,44 +798,91 @@ export async function createNoteRequest(
     description: string,
     category: NoteCategory
 ): Promise<string> {
-    const docRef = await addDoc(noteRequestsCollection, {
-        userId,
-        userName,
-        userEmail,
-        title,
-        description,
-        category,
-        status: 'pending',
-        createdAt: Timestamp.now(),
-    });
-    return docRef.id;
+    const functions = getFunctions(undefined, 'asia-south1');
+    const createRequest = httpsCallable(functions, 'createNoteRequestWithNotification');
+
+    try {
+        const result = await createRequest({
+            title,
+            description,
+            category
+        });
+        return (result.data as any).requestId;
+    } catch (error: any) {
+        console.error('Error creating request:', error);
+        throw new Error(error.message || 'Failed to create request');
+    }
 }
 
 export async function getUserNoteRequests(userId: string): Promise<NoteRequest[]> {
-    const q = query(noteRequestsCollection, where('userId', '==', userId), orderBy('createdAt', 'desc'));
-    const querySnapshot = await getDocs(q);
+    try {
+        const q = query(noteRequestsCollection, where('userId', '==', userId), orderBy('createdAt', 'desc'));
+        const querySnapshot = await getDocs(q);
 
-    return querySnapshot.docs.map((docSnap) => {
-        const data = docSnap.data();
-        return {
-            id: docSnap.id,
-            userId: data.userId,
-            userName: data.userName,
-            userEmail: data.userEmail,
-            title: data.title,
-            description: data.description,
-            category: data.category,
-            status: data.status,
-            createdAt: data.createdAt instanceof Timestamp
-                ? data.createdAt.toDate().toISOString()
-                : data.createdAt,
-            response: data.response,
-            responseLink: data.responseLink,
-            respondedAt: data.respondedAt instanceof Timestamp
-                ? data.respondedAt.toDate().toISOString()
-                : data.respondedAt,
-        };
-    });
+        return querySnapshot.docs.map((docSnap) => {
+            const data = docSnap.data();
+            return {
+                id: docSnap.id,
+                userId: data.userId,
+                userName: data.userName,
+                userEmail: data.userEmail,
+                title: data.title,
+                description: data.description,
+                category: data.category,
+                status: data.status,
+                createdAt: data.createdAt instanceof Timestamp
+                    ? data.createdAt.toDate().toISOString()
+                    : data.createdAt,
+                response: data.response,
+                responseLink: data.responseLink,
+                respondedAt: data.respondedAt instanceof Timestamp
+                    ? data.respondedAt.toDate().toISOString()
+                    : data.respondedAt,
+                fulfilledBy: data.fulfilledBy,
+                fulfillerName: data.fulfillerName,
+                fulfilledNoteId: data.fulfilledNoteId,
+                fulfilledAt: data.fulfilledAt instanceof Timestamp
+                    ? data.fulfilledAt.toDate().toISOString()
+                    : data.fulfilledAt,
+            };
+        });
+    } catch (error: any) {
+        // Fallback: query without ordering if composite index is missing
+        console.warn('getUserNoteRequests: Falling back to unordered query:', error.message);
+        const q = query(noteRequestsCollection, where('userId', '==', userId));
+        const querySnapshot = await getDocs(q);
+
+        const requests = querySnapshot.docs.map((docSnap) => {
+            const data = docSnap.data();
+            return {
+                id: docSnap.id,
+                userId: data.userId,
+                userName: data.userName,
+                userEmail: data.userEmail,
+                title: data.title,
+                description: data.description,
+                category: data.category,
+                status: data.status,
+                createdAt: data.createdAt instanceof Timestamp
+                    ? data.createdAt.toDate().toISOString()
+                    : data.createdAt,
+                response: data.response,
+                responseLink: data.responseLink,
+                respondedAt: data.respondedAt instanceof Timestamp
+                    ? data.respondedAt.toDate().toISOString()
+                    : data.respondedAt,
+                fulfilledBy: data.fulfilledBy,
+                fulfillerName: data.fulfillerName,
+                fulfilledNoteId: data.fulfilledNoteId,
+                fulfilledAt: data.fulfilledAt instanceof Timestamp
+                    ? data.fulfilledAt.toDate().toISOString()
+                    : data.fulfilledAt,
+            };
+        });
+
+        // Sort by createdAt descending in JavaScript
+        return requests.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
 }
 
 export async function getAllNoteRequests(): Promise<NoteRequest[]> {
@@ -879,6 +929,125 @@ export async function closeNoteRequest(requestId: string): Promise<void> {
     await updateDoc(doc(noteRequestsCollection, requestId), {
         status: 'closed',
     });
+}
+
+// Delete a note request (admin only - uses Cloud Function)
+export async function deleteNoteRequest(requestId: string): Promise<void> {
+    const functions = getFunctions(undefined, 'asia-south1');
+    const deleteRequest = httpsCallable(functions, 'deleteNoteRequest');
+
+    try {
+        await deleteRequest({ requestId });
+    } catch (error: any) {
+        console.error('Error deleting request:', error);
+        throw new Error(error.message || 'Failed to delete request');
+    }
+}
+
+// Get open note requests for community fulfillment (excludes user's own requests)
+export async function getOpenNoteRequests(excludeUserId: string): Promise<NoteRequest[]> {
+    try {
+        // Try with ordering first (requires composite index)
+        const q = query(noteRequestsCollection, where('status', '==', 'pending'), orderBy('createdAt', 'desc'));
+        const querySnapshot = await getDocs(q);
+
+        return querySnapshot.docs
+            .map((docSnap) => {
+                const data = docSnap.data();
+                return {
+                    id: docSnap.id,
+                    userId: data.userId,
+                    userName: data.userName,
+                    userEmail: data.userEmail,
+                    title: data.title,
+                    description: data.description,
+                    category: data.category,
+                    status: data.status,
+                    createdAt: data.createdAt instanceof Timestamp
+                        ? data.createdAt.toDate().toISOString()
+                        : data.createdAt,
+                };
+            })
+            .filter((request) => request.userId !== excludeUserId);
+    } catch (error: any) {
+        // Fallback: query without ordering if composite index is missing
+        console.warn('getOpenNoteRequests: Falling back to unordered query:', error.message);
+        const q = query(noteRequestsCollection, where('status', '==', 'pending'));
+        const querySnapshot = await getDocs(q);
+
+        const requests = querySnapshot.docs
+            .map((docSnap) => {
+                const data = docSnap.data();
+                return {
+                    id: docSnap.id,
+                    userId: data.userId,
+                    userName: data.userName,
+                    userEmail: data.userEmail,
+                    title: data.title,
+                    description: data.description,
+                    category: data.category,
+                    status: data.status,
+                    createdAt: data.createdAt instanceof Timestamp
+                        ? data.createdAt.toDate().toISOString()
+                        : data.createdAt,
+                };
+            })
+            .filter((request) => request.userId !== excludeUserId);
+
+        // Sort by createdAt descending in JavaScript
+        return requests.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+}
+
+// Get a single note request by ID
+export async function getNoteRequestById(requestId: string): Promise<NoteRequest | null> {
+    const docSnap = await getDoc(doc(noteRequestsCollection, requestId));
+    if (!docSnap.exists()) return null;
+
+    const data = docSnap.data();
+    return {
+        id: docSnap.id,
+        userId: data.userId,
+        userName: data.userName,
+        userEmail: data.userEmail,
+        title: data.title,
+        description: data.description,
+        category: data.category,
+        status: data.status,
+        createdAt: data.createdAt instanceof Timestamp
+            ? data.createdAt.toDate().toISOString()
+            : data.createdAt,
+        response: data.response,
+        responseLink: data.responseLink,
+        fulfilledBy: data.fulfilledBy,
+        fulfillerName: data.fulfillerName,
+        fulfilledNoteId: data.fulfilledNoteId,
+        fulfilledAt: data.fulfilledAt instanceof Timestamp
+            ? data.fulfilledAt.toDate().toISOString()
+            : data.fulfilledAt,
+    };
+}
+
+// Fulfill a note request by uploading the requested notes
+// Uses Cloud Function to bypass security rules
+export async function fulfillNoteRequest(
+    requestId: string,
+    noteId: string,
+    fulfillerId: string,
+    fulfillerName: string
+): Promise<void> {
+    const functions = getFunctions(undefined, 'asia-south1');
+    const fulfillRequest = httpsCallable(functions, 'fulfillNoteRequest');
+
+    try {
+        await fulfillRequest({
+            requestId,
+            noteId
+        });
+    } catch (error: any) {
+        console.error('Error fulfilling request:', error);
+        throw new Error(error.message || 'Failed to fulfill request');
+    }
 }
 
 // ============ FREE PYQ FUNCTIONS ============
@@ -1042,4 +1211,111 @@ export async function getUnreadNotificationCount(userId: string): Promise<number
     );
     const querySnapshot = await getDocs(q);
     return querySnapshot.size;
+}
+
+// Real-time subscription to notifications
+export function subscribeToNotifications(
+    userId: string,
+    callback: (notifications: Notification[]) => void
+): () => void {
+    const q = query(
+        notificationsCollection,
+        where('userId', '==', userId),
+        orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const notifications = querySnapshot.docs.map((docSnap) => {
+            const data = docSnap.data();
+            return {
+                id: docSnap.id,
+                userId: data.userId,
+                type: data.type as NotificationType,
+                title: data.title,
+                message: data.message,
+                isRead: data.isRead || false,
+                createdAt: data.createdAt instanceof Timestamp
+                    ? data.createdAt.toDate().toISOString()
+                    : data.createdAt || new Date().toISOString(),
+                linkTo: data.linkTo,
+                relatedId: data.relatedId,
+            };
+        });
+        callback(notifications);
+    }, (error) => {
+        console.error('Error subscribing to notifications:', error);
+    });
+
+    return unsubscribe;
+}
+
+// ============ ANNOUNCEMENTS FUNCTIONS ============
+
+export async function createAnnouncement(
+    title: string,
+    message: string,
+    createdBy: string,
+    authorName: string
+): Promise<string> {
+    const docRef = await addDoc(announcementsCollection, {
+        title,
+        message,
+        createdBy,
+        authorName,
+        createdAt: Timestamp.now(),
+    });
+    return docRef.id;
+}
+
+export async function deleteAnnouncement(announcementId: string): Promise<void> {
+    const docRef = doc(announcementsCollection, announcementId);
+    await deleteDoc(docRef);
+}
+
+export async function getAnnouncements(limitCount = 10): Promise<Announcement[]> {
+    const q = query(
+        announcementsCollection,
+        orderBy('createdAt', 'desc'),
+        limit(limitCount)
+    );
+    const querySnapshot = await getDocs(q);
+
+    return querySnapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+            id: docSnap.id,
+            title: data.title,
+            message: data.message,
+            createdBy: data.createdBy,
+            authorName: data.authorName,
+            createdAt: data.createdAt instanceof Timestamp
+                ? data.createdAt.toDate().toISOString()
+                : data.createdAt,
+        };
+    });
+}
+
+export function subscribeToAnnouncements(callback: (announcements: Announcement[]) => void, limitCount = 10) {
+    const q = query(
+        announcementsCollection,
+        orderBy('createdAt', 'desc'),
+        limit(limitCount)
+    );
+
+    return onSnapshot(q, (snapshot) => {
+        const announcements = snapshot.docs.map((docSnap) => {
+            const data = docSnap.data();
+            return {
+                id: docSnap.id,
+                title: data.title,
+                message: data.message,
+                createdBy: data.createdBy,
+                authorName: data.authorName,
+                createdAt: data.createdAt instanceof Timestamp
+                    ? data.createdAt.toDate().toISOString()
+                    : data.createdAt,
+            } as Announcement;
+        });
+        callback(announcements);
+    });
 }

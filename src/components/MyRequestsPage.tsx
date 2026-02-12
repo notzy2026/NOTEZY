@@ -1,15 +1,25 @@
-import { FileQuestion, Plus, X, Clock, CheckCircle, Link, ExternalLink, MessageSquare } from 'lucide-react';
+import { FileQuestion, Plus, X, Clock, CheckCircle, MessageSquare, ExternalLink, Users, Upload, Gift } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { NoteRequest, NoteCategory } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { createNoteRequest, getUserNoteRequests } from '../lib/firestore';
+import { createNoteRequest, getUserNoteRequests, getOpenNoteRequests } from '../lib/firestore';
+import { FulfillUploadModal } from './FulfillUploadModal';
+
+type TabType = 'my-requests' | 'community';
 
 export function MyRequestsPage() {
+    const navigate = useNavigate();
     const { user, userProfile } = useAuth();
-    const [requests, setRequests] = useState<NoteRequest[]>([]);
+    const [activeTab, setActiveTab] = useState<TabType>('my-requests');
+    const [myRequests, setMyRequests] = useState<NoteRequest[]>([]);
+    const [communityRequests, setCommunityRequests] = useState<NoteRequest[]>([]);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+
+    // Fulfill modal state
+    const [fulfillRequest, setFulfillRequest] = useState<NoteRequest | null>(null);
 
     // Form state
     const [title, setTitle] = useState('');
@@ -18,15 +28,23 @@ export function MyRequestsPage() {
 
     useEffect(() => {
         if (user) {
-            loadRequests();
+            loadData();
         }
     }, [user]);
 
-    async function loadRequests() {
+    async function loadData() {
         if (!user) return;
+        setLoading(true);
         try {
-            const data = await getUserNoteRequests(user.uid);
-            setRequests(data);
+            console.log('Loading requests for user:', user.uid);
+            const [myData, communityData] = await Promise.all([
+                getUserNoteRequests(user.uid),
+                getOpenNoteRequests(user.uid)
+            ]);
+            console.log('My Requests loaded:', myData);
+            console.log('Community Requests loaded:', communityData);
+            setMyRequests(myData);
+            setCommunityRequests(communityData);
         } catch (error) {
             console.error('Error loading requests:', error);
         } finally {
@@ -52,13 +70,31 @@ export function MyRequestsPage() {
             setDescription('');
             setCategory('lecture-notes');
             setShowForm(false);
-            await loadRequests();
+            await loadData();
         } catch (error) {
             console.error('Error creating request:', error);
             alert('Failed to submit request');
         } finally {
             setSubmitting(false);
         }
+    }
+
+    function handleFulfill(request: NoteRequest) {
+        console.log('handleFulfill called with request:', request);
+        // Check if user is logged in
+        if (!user) {
+            console.log('User not logged in, redirecting to login');
+            sessionStorage.setItem('pendingFulfillRequestId', request.id);
+            navigate('/login');
+            return;
+        }
+        // Open the fulfill upload modal
+        setFulfillRequest(request);
+    }
+
+    function handleFulfillSuccess() {
+        setFulfillRequest(null);
+        loadData(); // Refresh the requests list
     }
 
     const getStatusBadge = (status: NoteRequest['status']) => {
@@ -75,6 +111,13 @@ export function MyRequestsPage() {
                     <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs rounded-full">
                         <CheckCircle className="w-3 h-3" />
                         Responded
+                    </span>
+                );
+            case 'fulfilled':
+                return (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 text-xs rounded-full">
+                        <Gift className="w-3 h-3" />
+                        Fulfilled
                     </span>
                 );
             case 'closed':
@@ -104,8 +147,8 @@ export function MyRequestsPage() {
                             <FileQuestion className="w-6 h-6 text-white" />
                         </div>
                         <div>
-                            <h1 className="text-2xl text-gray-900 dark:text-white">My Requests</h1>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">Request notes you can't find</p>
+                            <h1 className="text-2xl text-gray-900 dark:text-white">Note Requests</h1>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Request & help others</p>
                         </div>
                     </div>
                     <button
@@ -114,6 +157,42 @@ export function MyRequestsPage() {
                     >
                         <Plus className="w-5 h-5" />
                         New Request
+                    </button>
+                </div>
+
+                {/* Tabs */}
+                <div className="flex gap-2 mb-6 bg-white dark:bg-gray-900 p-1.5 rounded-xl border border-gray-200 dark:border-gray-800">
+                    <button
+                        onClick={() => setActiveTab('my-requests')}
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all ${activeTab === 'my-requests'
+                            ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md'
+                            : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                            }`}
+                    >
+                        <FileQuestion className="w-4 h-4" />
+                        My Requests
+                        {myRequests.length > 0 && (
+                            <span className={`px-1.5 py-0.5 text-xs rounded-full ${activeTab === 'my-requests' ? 'bg-white/20' : 'bg-gray-200 dark:bg-gray-700'
+                                }`}>
+                                {myRequests.length}
+                            </span>
+                        )}
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('community')}
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all ${activeTab === 'community'
+                            ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md'
+                            : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                            }`}
+                    >
+                        <Users className="w-4 h-4" />
+                        Community Requests
+                        {communityRequests.length > 0 && (
+                            <span className={`px-1.5 py-0.5 text-xs rounded-full ${activeTab === 'community' ? 'bg-white/20' : 'bg-orange-200 dark:bg-orange-900/50 text-orange-700 dark:text-orange-400'
+                                }`}>
+                                {communityRequests.length}
+                            </span>
+                        )}
                     </button>
                 </div>
 
@@ -174,63 +253,137 @@ export function MyRequestsPage() {
                     </div>
                 )}
 
-                {/* Requests List */}
-                {requests.length > 0 ? (
-                    <div className="space-y-4">
-                        {requests.map((request) => (
-                            <div key={request.id} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 shadow-lg">
-                                <div className="flex items-start justify-between mb-3">
-                                    <div>
-                                        <h3 className="text-lg text-gray-900 dark:text-white font-medium">{request.title}</h3>
-                                        <span className="text-sm text-gray-500 dark:text-gray-400 capitalize">{request.category.replace('-', ' ')}</span>
-                                    </div>
-                                    {getStatusBadge(request.status)}
-                                </div>
-                                <p className="text-gray-600 dark:text-gray-400 mb-4">{request.description}</p>
-                                <div className="text-xs text-gray-500 dark:text-gray-500 mb-4">
-                                    Requested on {new Date(request.createdAt).toLocaleDateString()}
-                                </div>
-
-                                {/* Response Section */}
-                                {request.response && (
-                                    <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 border border-green-200 dark:border-green-800">
-                                        <div className="flex items-center gap-2 text-green-700 dark:text-green-400 mb-2">
-                                            <MessageSquare className="w-4 h-4" />
-                                            <span className="font-medium">Admin Response</span>
+                {/* My Requests Tab Content */}
+                {activeTab === 'my-requests' && (
+                    <>
+                        {myRequests.length > 0 ? (
+                            <div className="space-y-4">
+                                {myRequests.map((request) => (
+                                    <div key={request.id} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 shadow-lg">
+                                        <div className="flex items-start justify-between mb-3">
+                                            <div>
+                                                <h3 className="text-lg text-gray-900 dark:text-white font-medium">{request.title}</h3>
+                                                <span className="text-sm text-gray-500 dark:text-gray-400 capitalize">{request.category.replace('-', ' ')}</span>
+                                            </div>
+                                            {getStatusBadge(request.status)}
                                         </div>
-                                        <p className="text-gray-700 dark:text-gray-300">{request.response}</p>
-                                        {request.responseLink && (
-                                            <a
-                                                href={request.responseLink}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                                            >
-                                                <ExternalLink className="w-4 h-4" />
-                                                View Notes
-                                            </a>
+                                        <p className="text-gray-600 dark:text-gray-400 mb-4">{request.description}</p>
+                                        <div className="text-xs text-gray-500 dark:text-gray-500 mb-4">
+                                            Requested on {new Date(request.createdAt).toLocaleDateString()}
+                                        </div>
+
+                                        {/* Admin Response Section */}
+                                        {request.response && (
+                                            <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 border border-green-200 dark:border-green-800">
+                                                <div className="flex items-center gap-2 text-green-700 dark:text-green-400 mb-2">
+                                                    <MessageSquare className="w-4 h-4" />
+                                                    <span className="font-medium">Admin Response</span>
+                                                </div>
+                                                <p className="text-gray-700 dark:text-gray-300">{request.response}</p>
+                                                {request.responseLink && (
+                                                    <a
+                                                        href={request.responseLink}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                                    >
+                                                        <ExternalLink className="w-4 h-4" />
+                                                        View Notes
+                                                    </a>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Fulfilled Section */}
+                                        {request.status === 'fulfilled' && request.fulfilledNoteId && (
+                                            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4 border border-purple-200 dark:border-purple-800">
+                                                <div className="flex items-center gap-2 text-purple-700 dark:text-purple-400 mb-2">
+                                                    <Gift className="w-4 h-4" />
+                                                    <span className="font-medium">Fulfilled by {request.fulfillerName}</span>
+                                                </div>
+                                                <button
+                                                    onClick={() => navigate(`/note/${request.fulfilledNoteId}`)}
+                                                    className="inline-flex items-center gap-2 mt-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                                                >
+                                                    <ExternalLink className="w-4 h-4" />
+                                                    View Uploaded Notes
+                                                </button>
+                                            </div>
                                         )}
                                     </div>
-                                )}
+                                ))}
                             </div>
-                        ))}
-                    </div>
-                ) : (
-                    <div className="text-center py-20 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800">
-                        <FileQuestion className="w-20 h-20 mx-auto mb-4 text-gray-300 dark:text-gray-700" />
-                        <h3 className="text-gray-900 dark:text-white mb-2">No Requests Yet</h3>
-                        <p className="text-gray-600 dark:text-gray-400 mb-6">
-                            Can't find notes you need? Submit a request!
-                        </p>
-                        <button
-                            onClick={() => setShowForm(true)}
-                            className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all"
-                        >
-                            Submit Your First Request
-                        </button>
-                    </div>
+                        ) : (
+                            <div className="text-center py-20 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800">
+                                <FileQuestion className="w-20 h-20 mx-auto mb-4 text-gray-300 dark:text-gray-700" />
+                                <h3 className="text-gray-900 dark:text-white mb-2">No Requests Yet</h3>
+                                <p className="text-gray-600 dark:text-gray-400 mb-6">
+                                    Can't find notes you need? Submit a request!
+                                </p>
+                                <button
+                                    onClick={() => setShowForm(true)}
+                                    className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all"
+                                >
+                                    Submit Your First Request
+                                </button>
+                            </div>
+                        )}
+                    </>
+                )}
+
+                {/* Community Requests Tab Content */}
+                {activeTab === 'community' && (
+                    <>
+                        {communityRequests.length > 0 ? (
+                            <div className="space-y-4">
+                                {communityRequests.map((request) => (
+                                    <div key={request.id} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 shadow-lg">
+                                        <div className="flex items-start justify-between mb-3">
+                                            <div>
+                                                <h3 className="text-lg text-gray-900 dark:text-white font-medium">{request.title}</h3>
+                                                <span className="text-sm text-gray-500 dark:text-gray-400 capitalize">{request.category.replace('-', ' ')}</span>
+                                            </div>
+                                            <span className="text-sm text-gray-500 dark:text-gray-400">
+                                                by {request.userName}
+                                            </span>
+                                        </div>
+                                        <p className="text-gray-600 dark:text-gray-400 mb-4">{request.description}</p>
+                                        <div className="flex items-center justify-between">
+                                            <div className="text-xs text-gray-500 dark:text-gray-500">
+                                                Requested on {new Date(request.createdAt).toLocaleDateString()}
+                                            </div>
+                                            <button
+                                                onClick={() => handleFulfill(request)}
+                                                className="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg flex items-center gap-2 hover:shadow-lg transition-all"
+                                            >
+                                                <Upload className="w-4 h-4" />
+                                                Fulfill Request
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-center py-20 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800">
+                                <Users className="w-20 h-20 mx-auto mb-4 text-gray-300 dark:text-gray-700" />
+                                <h3 className="text-gray-900 dark:text-white mb-2">No Community Requests</h3>
+                                <p className="text-gray-600 dark:text-gray-400">
+                                    All requests have been fulfilled or there are no pending requests from other users.
+                                </p>
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
+
+            {/* Fulfill Upload Modal */}
+            {fulfillRequest && (
+                <FulfillUploadModal
+                    request={fulfillRequest}
+                    onClose={() => setFulfillRequest(null)}
+                    onSuccess={handleFulfillSuccess}
+                />
+            )}
         </div>
     );
 }

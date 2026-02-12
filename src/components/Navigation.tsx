@@ -1,8 +1,10 @@
-import { Home, Download, Bookmark, IndianRupee, User, Upload, Menu, X, Moon, Sun, Settings, MessageSquare, Shield, Users, FileText, LogOut, Wallet, FileQuestion, LogIn, BookOpen } from 'lucide-react';
+import { Home, Download, Bookmark, IndianRupee, User, Upload, Menu, X, Moon, Sun, Settings, MessageSquare, Shield, Users, FileText, LogOut, Wallet, FileQuestion, LogIn, BookOpen, Megaphone } from 'lucide-react';
 import { useState } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { NotificationsDropdown } from './NotificationsDropdown';
+import { AnnouncementsDropdown } from './AnnouncementsDropdown';
+import { CreateAnnouncementModal } from './CreateAnnouncementModal';
 
 interface NavigationProps {
   currentPage: string;
@@ -12,6 +14,7 @@ interface NavigationProps {
 
 export function Navigation({ currentPage, onNavigate, onLoginRequest }: NavigationProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isAnnouncementModalOpen, setIsAnnouncementModalOpen] = useState(false);
   const { isDark, toggleTheme } = useTheme();
   const { userProfile, logout, isGuest, exitGuestMode } = useAuth();
 
@@ -135,6 +138,21 @@ export function Navigation({ currentPage, onNavigate, onLoginRequest }: Navigati
           })}
         </nav>
 
+
+
+        {/* Admin Announcement Button */}
+        {isAdmin && (
+          <div className="px-4 pb-2">
+            <button
+              onClick={() => setIsAnnouncementModalOpen(true)}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 active:scale-95"
+            >
+              <Megaphone className="w-4 h-4" />
+              <span className="text-sm font-medium">Announcement</span>
+            </button>
+          </div>
+        )}
+
         {/* Bottom Section - Theme Toggle & Logout */}
         <div className="p-4 border-t border-gray-200 dark:border-slate-700 space-y-1">
           <button
@@ -174,7 +192,6 @@ export function Navigation({ currentPage, onNavigate, onLoginRequest }: Navigati
       </aside>
 
       {/* Mobile Header */}
-      {/* Mobile Header */}
       <header className="lg:hidden fixed top-0 left-0 right-0 z-50 glass border-b border-gray-200 dark:border-slate-700">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
@@ -197,7 +214,10 @@ export function Navigation({ currentPage, onNavigate, onLoginRequest }: Navigati
             </button>
             {/* Notifications - only show for logged in users */}
             {!isGuest && (
-              <NotificationsDropdown onNavigate={onNavigate} />
+              <>
+                <AnnouncementsDropdown />
+                <NotificationsDropdown onNavigate={onNavigate} />
+              </>
             )}
             {/* Login for Guests */}
             {isGuest && onLoginRequest && (
@@ -236,33 +256,35 @@ export function Navigation({ currentPage, onNavigate, onLoginRequest }: Navigati
       </header>
 
       {/* Mobile Hamburger Menu Dropdown */}
-      {mobileMenuOpen && mobileMenuItems.length > 0 && (
-        <div className="lg:hidden fixed left-0 right-0 z-40 glass border-b border-gray-200 dark:border-slate-700 shadow-lg" style={{ top: '56px' }}>
-          <nav className="p-2">
-            {mobileMenuItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = currentPage === item.id;
+      {
+        mobileMenuOpen && mobileMenuItems.length > 0 && (
+          <div className="lg:hidden fixed left-0 right-0 z-40 glass border-b border-gray-200 dark:border-slate-700 shadow-lg" style={{ top: '56px' }}>
+            <nav className="p-2">
+              {mobileMenuItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = currentPage === item.id;
 
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    onNavigate(item.id);
-                    setMobileMenuOpen(false);
-                  }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${isActive
-                    ? 'bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 text-white'
-                    : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800'
-                    }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span>{item.label}</span>
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-      )}
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      onNavigate(item.id);
+                      setMobileMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${isActive
+                      ? 'bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 text-white'
+                      : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800'
+                      }`}
+                  >
+                    <Icon className="w-5 h-5" />
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+        )
+      }
 
       {/* Mobile Bottom Navigation */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 glass border-t border-gray-200 dark:border-slate-700">
@@ -289,6 +311,10 @@ export function Navigation({ currentPage, onNavigate, onLoginRequest }: Navigati
           })}
         </div>
       </nav>
+      <CreateAnnouncementModal
+        isOpen={isAnnouncementModalOpen}
+        onClose={() => setIsAnnouncementModalOpen(false)}
+      />
     </>
   );
 }

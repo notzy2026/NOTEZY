@@ -1,6 +1,7 @@
 import { Note } from '../types';
 import { Loader2 } from 'lucide-react';
 import { Star, ShoppingCart, Bookmark, Eye, FileText, TrendingUp, ShieldCheck } from 'lucide-react';
+import { ShareButton } from './ShareButton';
 
 interface NoteCardProps {
   note: Note;
@@ -56,7 +57,8 @@ export function NoteCard({
           )}
         </div>
 
-        <div className="absolute top-3 right-3">
+        <div className="absolute top-3 right-3 flex gap-2">
+          <ShareButton noteId={note.id} noteTitle={note.title} variant="compact" />
           {onBookmark && (
             <button
               onClick={(e) => {

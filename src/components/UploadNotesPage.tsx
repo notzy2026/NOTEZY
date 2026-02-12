@@ -1,14 +1,17 @@
-import { Upload, Image, FileText, IndianRupee, Tag, File, Loader2, BookOpen, Plus, X, GripVertical } from 'lucide-react';
+import { Upload, Image, FileText, IndianRupee, Tag, File, Loader2, BookOpen, Plus, X, GripVertical, Gift } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { NoteCategory, Course } from '../types';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { NoteCategory, Course, NoteRequest } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { createNote, getCourses, addCourse } from '../lib/firestore';
+import { createNote, getCourses, addCourse, getNoteRequestById, fulfillNoteRequest } from '../lib/firestore';
 import { uploadNotePreview, uploadNoteFile } from '../lib/storage';
 import { extractPdfPreviews, getPdfPageCount } from '../lib/pdfUtils';
 import { compressPdf, formatFileSize, CompressionResult } from '../lib/compressPdf';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
 export function UploadNotesPage() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { user, userProfile } = useAuth();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -24,6 +27,11 @@ export function UploadNotesPage() {
   const [compressionResults, setCompressionResults] = useState<CompressionResult[]>([]);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
+  // Request fulfillment state
+  const requestId = searchParams.get('requestId');
+  const [fulfillingRequest, setFulfillingRequest] = useState<NoteRequest | null>(null);
+  const [loadingRequest, setLoadingRequest] = useState(false);
+
   // PYQ specific state
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourseCode, setSelectedCourseCode] = useState('');
@@ -32,6 +40,32 @@ export function UploadNotesPage() {
   const [newCourseCode, setNewCourseCode] = useState('');
   const [newCourseName, setNewCourseName] = useState('');
   const [loadingCourses, setLoadingCourses] = useState(false);
+
+  // Load request if fulfilling
+  useEffect(() => {
+    if (requestId) {
+      loadRequest();
+    }
+  }, [requestId]);
+
+  const loadRequest = async () => {
+    if (!requestId) return;
+    console.log('UploadNotesPage: Loading request with ID:', requestId);
+    setLoadingRequest(true);
+    try {
+      const request = await getNoteRequestById(requestId);
+      console.log('UploadNotesPage: Request loaded:', request);
+      if (request) {
+        setFulfillingRequest(request);
+        // Pre-fill the category from request
+        setCategory(request.category);
+      }
+    } catch (err) {
+      console.error('Error loading request:', err);
+    } finally {
+      setLoadingRequest(false);
+    }
+  };
 
   // Load courses when PYQ is selected
   useEffect(() => {
@@ -202,7 +236,7 @@ export function UploadNotesPage() {
 
         // Create note document in Firestore
         setUploadProgress('Creating note...');
-        await createNote({
+        const noteId = await createNote({
           title,
           description,
           category,
@@ -217,6 +251,12 @@ export function UploadNotesPage() {
 
         console.log('Note created with PDF URLs:', pdfUrls);
 
+        // If fulfilling a request, mark it as fulfilled
+        if (fulfillingRequest && requestId) {
+          setUploadProgress('Marking request as fulfilled...');
+          await fulfillNoteRequest(requestId, noteId, user.uid, userProfile.name);
+        }
+
         setSubmitted(true);
         setUploadProgress('');
         setTimeout(() => {
@@ -228,6 +268,10 @@ export function UploadNotesPage() {
           setPreviewFiles([]);
           setPdfFiles([]);
           setCompressionResults([]);
+          // Navigate back to requests page if fulfilling
+          if (fulfillingRequest) {
+            navigate('/requests');
+          }
         }, 3000);
       }
     } catch (err) {
@@ -372,6 +416,21 @@ export function UploadNotesPage() {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 space-y-6 shadow-lg">
+            {/* Fulfillment Banner */}
+            {fulfillingRequest && (
+              <div className="p-4 bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-300 dark:border-purple-700 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
+                    <Gift className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-purple-700 dark:text-purple-300 font-medium">Fulfilling Request</p>
+                    <p className="text-purple-600 dark:text-purple-400 text-sm">"{fulfillingRequest.title}" by {fulfillingRequest.userName}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {error && (
               <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
                 {error}

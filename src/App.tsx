@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useNavigate } from 'react-router-dom';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Navigation } from './components/Navigation';
@@ -31,6 +31,7 @@ import { AdminPayoutsPage } from './components/AdminPayoutsPage';
 import { AdminRequestsPage } from './components/AdminRequestsPage';
 import { AdminFreePYQPage } from './components/AdminFreePYQPage';
 import { MyRequestsPage } from './components/MyRequestsPage';
+import { NoteDeepLink } from './components/NoteDeepLink';
 
 import { LoginPromptModal } from './components/LoginPromptModal';
 import { OnboardingModal } from './components/OnboardingModal';
@@ -57,8 +58,9 @@ import {
 import { useRazorpay } from './hooks/useRazorpay';
 
 function AppContent() {
-  const { isAuthenticated, isLoading, user, userProfile, logout, isGuest, exitGuestMode, isNewUser, setIsNewUser } = useAuth();
+  const { isAuthenticated, isLoading, user, userProfile, logout, isGuest, exitGuestMode, isNewUser, setIsNewUser, returnUrl, setReturnUrl } = useAuth();
   const { initiatePayment, loading: paymentLoading } = useRazorpay();
+  const navigate = useNavigate();
 
   const [authPage, setAuthPage] = useState<'landing' | 'login' | 'signup'>('landing');
   const [currentPage, setCurrentPage] = useState('home');
@@ -98,6 +100,15 @@ function AppContent() {
       setCurrentPage('admin');
     }
   }, [userProfile?.isAdmin]);
+
+  // Handle redirect back to note page after login
+  useEffect(() => {
+    if (isAuthenticated && !isGuest && returnUrl) {
+      const url = returnUrl;
+      setReturnUrl(null); // Clear the return URL
+      navigate(url);
+    }
+  }, [isAuthenticated, isGuest, returnUrl, navigate, setReturnUrl]);
 
   // Check if user is blocked
   const isBlocked = userProfile?.isBlocked || false;
@@ -175,14 +186,16 @@ function AppContent() {
 
   // Show login/signup if not authenticated and not guest
   if (!isAuthenticated && !isGuest) {
-    if (authPage === 'login') {
+    // If there's a return URL, show login page directly (user came from shared link)
+    const pageToShow = returnUrl ? 'login' : authPage;
+    if (pageToShow === 'login') {
       return (
         <LoginPage
           onNavigateToSignup={() => setAuthPage('signup')}
           onNavigateToLanding={() => setAuthPage('landing')}
         />
       );
-    } else if (authPage === 'signup') {
+    } else if (pageToShow === 'signup') {
       return (
         <SignupPage
           onNavigateToLogin={() => setAuthPage('login')}
@@ -534,6 +547,9 @@ export default function App() {
           <Route path="/refund" element={<PublicRefundPage />} />
           <Route path="/shipping" element={<PublicShippingPage />} />
           <Route path="/contact" element={<ContactUsPage />} />
+
+          {/* Deep link for shared notes */}
+          <Route path="/note/:noteId" element={<NoteDeepLink />} />
 
           {/* Main app route */}
           <Route path="/*" element={<AppContent />} />
