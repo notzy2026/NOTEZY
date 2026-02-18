@@ -18,7 +18,7 @@ export function FulfillUploadModal({ request, onClose, onSuccess }: FulfillUploa
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [price, setPrice] = useState('');
-    const [pdfFiles, setPdfFiles] = useState<File[]>([]);
+    const [noteFiles, setNoteFiles] = useState<File[]>([]);
     const [previewFiles, setPreviewFiles] = useState<File[]>([]);
     const [uploading, setUploading] = useState(false);
     const [extracting, setExtracting] = useState(false);
@@ -27,40 +27,46 @@ export function FulfillUploadModal({ request, onClose, onSuccess }: FulfillUploa
     const [compressionResults, setCompressionResults] = useState<CompressionResult[]>([]);
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
-    const handlePdfFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files.length > 0) {
             const files = Array.from(e.target.files);
 
-            // Validate that all files are PDFs
-            const nonPdfFiles = files.filter(file => file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf'));
-            if (nonPdfFiles.length > 0) {
-                setError('Only PDF files are supported.');
-                e.target.value = '';
-                return;
-            }
-
-            setPdfFiles(files);
+            setNoteFiles(files);
             setPreviewFiles([]);
-
-            // Auto-extract previews from the first PDF
-            setExtracting(true);
             setError('');
-            try {
-                const maxPreviewPages = request.category === 'assignment' ? 1 : 4;
-                const previews = await extractPdfPreviews(files[0], maxPreviewPages);
-                setPreviewFiles(previews);
-            } catch (err) {
-                console.error('Error extracting previews:', err);
-                setError('Could not extract previews. Please try a different PDF file.');
-            } finally {
-                setExtracting(false);
+
+            const firstFile = files[0];
+            const fileType = firstFile.type;
+            const fileName = firstFile.name.toLowerCase();
+
+            const isPdf = fileType === 'application/pdf' || fileName.endsWith('.pdf');
+            const isDoc = fileType.includes('word') || fileName.endsWith('.doc') || fileName.endsWith('.docx') ||
+                fileType.includes('presentation') || fileName.endsWith('.ppt') || fileName.endsWith('.pptx');
+
+            if (isPdf) {
+                // Auto-extract previews from the first PDF
+                setExtracting(true);
+                try {
+                    const maxPreviewPages = request.category === 'assignment' ? 1 : 4;
+                    const previews = await extractPdfPreviews(firstFile, maxPreviewPages);
+                    setPreviewFiles(previews);
+                } catch (err) {
+                    console.error('Error extracting previews:', err);
+                    setError('Could not extract previews. Please try a different PDF file.');
+                } finally {
+                    setExtracting(false);
+                }
+            } else if (isDoc) {
+                // Supported but no image preview generation
+            } else {
+                setError(`Preview of ${fileType || 'this file type'} is not supported.`);
             }
         }
     };
 
-    const removePdfFile = async (indexToRemove: number) => {
-        const newFiles = pdfFiles.filter((_, index) => index !== indexToRemove);
-        setPdfFiles(newFiles);
+    const removeFile = async (indexToRemove: number) => {
+        const newFiles = noteFiles.filter((_, index) => index !== indexToRemove);
+        setNoteFiles(newFiles);
 
         if (indexToRemove === 0 && newFiles.length > 0) {
             setExtracting(true);
@@ -89,11 +95,11 @@ export function FulfillUploadModal({ request, onClose, onSuccess }: FulfillUploa
             return;
         }
 
-        const newFiles = [...pdfFiles];
+        const newFiles = [...noteFiles];
         const draggedFile = newFiles[draggedIndex];
         newFiles.splice(draggedIndex, 1);
         newFiles.splice(dropIndex, 0, draggedFile);
-        setPdfFiles(newFiles);
+        setNoteFiles(newFiles);
 
         const firstFileChanged = draggedIndex === 0 || dropIndex === 0;
         if (firstFileChanged) {
@@ -111,8 +117,8 @@ export function FulfillUploadModal({ request, onClose, onSuccess }: FulfillUploa
         setDraggedIndex(null);
     };
 
-    const getTotalPdfSize = () => {
-        const totalBytes = pdfFiles.reduce((sum, file) => sum + file.size, 0);
+    const getTotalFileSize = () => {
+        const totalBytes = noteFiles.reduce((sum, file) => sum + file.size, 0);
         return (totalBytes / 1024 / 1024).toFixed(2);
     };
 
@@ -124,8 +130,8 @@ export function FulfillUploadModal({ request, onClose, onSuccess }: FulfillUploa
             return;
         }
 
-        if (pdfFiles.length === 0) {
-            setError('Please upload at least one PDF file');
+        if (noteFiles.length === 0) {
+            setError('Please upload at least one file');
             return;
         }
 
@@ -140,30 +146,35 @@ export function FulfillUploadModal({ request, onClose, onSuccess }: FulfillUploa
         try {
             const tempId = `note_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-            // Compress PDFs
-            setUploadProgress(`Compressing ${pdfFiles.length} PDF file(s)...`);
-            const compressedFiles: File[] = [];
+            // Process files (compress only PDFs)
+            setUploadProgress(`Processing ${noteFiles.length} file(s)...`);
+            const processedFiles: File[] = [];
             const compressionResultsList: CompressionResult[] = [];
 
-            for (let i = 0; i < pdfFiles.length; i++) {
-                setUploadProgress(`Compressing PDF ${i + 1} of ${pdfFiles.length}...`);
-                try {
-                    const result = await compressPdf(pdfFiles[i]);
-                    compressedFiles.push(result.compressedFile);
-                    compressionResultsList.push(result);
-                } catch {
-                    compressedFiles.push(pdfFiles[i]);
+            for (let i = 0; i < noteFiles.length; i++) {
+                const file = noteFiles[i];
+                if (file.type === 'application/pdf') {
+                    setUploadProgress(`Compressing PDF ${i + 1} of ${noteFiles.length}...`);
+                    try {
+                        const result = await compressPdf(file);
+                        processedFiles.push(result.compressedFile);
+                        compressionResultsList.push(result);
+                    } catch {
+                        processedFiles.push(file);
+                    }
+                } else {
+                    processedFiles.push(file);
                 }
             }
             setCompressionResults(compressionResultsList);
 
-            // Upload PDFs
-            setUploadProgress(`Uploading ${compressedFiles.length} PDF file(s)...`);
-            const pdfUrls: string[] = [];
-            for (let i = 0; i < compressedFiles.length; i++) {
-                setUploadProgress(`Uploading PDF ${i + 1} of ${compressedFiles.length}...`);
-                const url = await uploadNoteFile(compressedFiles[i], `${tempId}_${i}`);
-                pdfUrls.push(url);
+            // Upload files
+            setUploadProgress(`Uploading ${processedFiles.length} file(s)...`);
+            const fileUrls: string[] = [];
+            for (let i = 0; i < processedFiles.length; i++) {
+                setUploadProgress(`Uploading file ${i + 1} of ${processedFiles.length}...`);
+                const url = await uploadNoteFile(processedFiles[i], `${tempId}_${i}`);
+                fileUrls.push(url);
             }
 
             // Upload previews
@@ -174,12 +185,14 @@ export function FulfillUploadModal({ request, onClose, onSuccess }: FulfillUploa
                 previewUrls.push(url);
             }
 
-            // Count pages
+            // Count pages (only for PDFs)
             setUploadProgress('Counting pages...');
             let totalPages = 0;
-            for (const pdfFile of pdfFiles) {
-                const pageCount = await getPdfPageCount(pdfFile);
-                totalPages += pageCount;
+            for (const file of noteFiles) {
+                if (file.type === 'application/pdf') {
+                    const pageCount = await getPdfPageCount(file);
+                    totalPages += pageCount;
+                }
             }
 
             // Create note
@@ -191,7 +204,7 @@ export function FulfillUploadModal({ request, onClose, onSuccess }: FulfillUploa
                 price: parseFloat(price),
                 previewPages: previewUrls,
                 thumbnailUrl: previewUrls[0] || '',
-                pdfUrls,
+                pdfUrls: fileUrls,
                 totalPages,
                 uploaderId: user.uid,
                 uploaderName: userProfile.name,
@@ -303,32 +316,32 @@ export function FulfillUploadModal({ request, onClose, onSuccess }: FulfillUploa
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Minimum price: ₹20</p>
                     </div>
 
-                    {/* PDF Upload */}
+                    {/* File Upload */}
                     <div>
                         <label className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-2 text-sm font-medium">
                             <File className="w-4 h-4" />
-                            PDF Files *
+                            Files *
                         </label>
+                        <p className="text-gray-600 dark:text-gray-400 text-xs mb-2">Upload files (PDF, DOCX, PPT, etc.)</p>
                         <input
                             type="file"
-                            accept=".pdf,application/pdf"
                             multiple
-                            onChange={handlePdfFileChange}
+                            onChange={handleFileChange}
                             disabled={uploading}
                             className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-purple-600 file:text-white hover:file:bg-purple-700 text-gray-900 dark:text-white disabled:opacity-50"
                         />
-                        {pdfFiles.length > 0 && (
+                        {noteFiles.length > 0 && (
                             <div className="mt-3 space-y-2">
                                 <div className="text-sm text-green-600 dark:text-green-400">
-                                    {pdfFiles.length} PDF file(s) selected ({getTotalPdfSize()} MB total)
+                                    {noteFiles.length} file(s) selected ({getTotalFileSize()} MB total)
                                 </div>
-                                {pdfFiles.length > 1 && (
+                                {noteFiles.length > 1 && (
                                     <p className="text-xs text-gray-500 dark:text-gray-400">
                                         Drag files to reorder • First file is used for preview
                                     </p>
                                 )}
                                 <div className="space-y-2">
-                                    {pdfFiles.map((file, index) => (
+                                    {noteFiles.map((file, index) => (
                                         <div
                                             key={index}
                                             draggable={!uploading}
@@ -350,7 +363,7 @@ export function FulfillUploadModal({ request, onClose, onSuccess }: FulfillUploa
                                             </span>
                                             <button
                                                 type="button"
-                                                onClick={() => removePdfFile(index)}
+                                                onClick={() => removeFile(index)}
                                                 disabled={uploading}
                                                 className="p-1 rounded-full hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
                                             >
@@ -364,7 +377,7 @@ export function FulfillUploadModal({ request, onClose, onSuccess }: FulfillUploa
                                         <div className="text-sm font-medium text-blue-800 dark:text-blue-300 mb-1">📦 Compression Results</div>
                                         {compressionResults.map((result, index) => (
                                             <div key={index} className="text-xs text-blue-700 dark:text-blue-400">
-                                                {pdfFiles[index]?.name}: {formatFileSize(result.originalSize)} → {formatFileSize(result.compressedSize)}
+                                                {noteFiles[index]?.name}: {formatFileSize(result.originalSize)} → {formatFileSize(result.compressedSize)}
                                                 <span className="ml-2 px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded">
                                                     {result.compressionRatio > 0 ? `${result.compressionRatio.toFixed(0)}% smaller` : 'No reduction'}
                                                 </span>
