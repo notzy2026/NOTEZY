@@ -27,11 +27,11 @@ export function NotesViewer({ note, onClose }: NotesViewerProps) {
 
   // Derived state
   const isFirstFile = selectedFileIndex === 0;
-  const hasMultipleFiles = note.pdfUrls && note.pdfUrls.length > 1;
-  const currentFileUrl = note.pdfUrls && note.pdfUrls[selectedFileIndex];
+  const hasMultipleFiles = (note.pdfUrls?.length ?? 0) > 1;
+  const currentFileUrl = note.pdfUrls?.[selectedFileIndex] || '';
 
   // Pagination logic only applies to the first file which has preview images
-  const totalPages = isFirstFile ? note.previewPages.length : 1;
+  const totalPages = isFirstFile && note.previewPages && note.previewPages.length > 0 ? note.previewPages.length : 1;
 
   const handlePrevPage = () => {
     if (isFirstFile) {
@@ -90,7 +90,7 @@ export function NotesViewer({ note, onClose }: NotesViewerProps) {
                 {hasMultipleFiles && (
                   <>
                     <span className="text-slate-600">•</span>
-                    <span className="text-blue-400">{note.pdfUrls.length} files</span>
+                    <span className="text-blue-400">{note.pdfUrls?.length || 0} files</span>
                   </>
                 )}
               </div>
@@ -129,11 +129,11 @@ export function NotesViewer({ note, onClose }: NotesViewerProps) {
             <div className="p-4 border-b border-slate-800">
               <h3 className="text-white font-medium flex items-center gap-2">
                 <FileText className="w-4 h-4 text-blue-400" />
-                Files ({note.pdfUrls.length})
+                Files ({note.pdfUrls?.length || 0})
               </h3>
             </div>
             <div className="p-2 space-y-1">
-              {note.pdfUrls.map((_, index) => (
+              {note.pdfUrls?.map((_, index) => (
                 <button
                   key={index}
                   onClick={() => setSelectedFileIndex(index)}
@@ -163,7 +163,7 @@ export function NotesViewer({ note, onClose }: NotesViewerProps) {
         {/* File Switcher (Mobile) */}
         {hasMultipleFiles && (
           <div className="lg:hidden absolute top-[60px] left-0 right-0 z-40 bg-slate-900 border-b border-slate-800 p-2 flex overflow-x-auto gap-2 no-scrollbar">
-            {note.pdfUrls.map((_, index) => (
+            {note.pdfUrls?.map((_, index) => (
               <button
                 key={index}
                 onClick={() => setSelectedFileIndex(index)}
@@ -182,7 +182,7 @@ export function NotesViewer({ note, onClose }: NotesViewerProps) {
         <div className={`flex-1 flex flex-col relative bg-slate-950 ${hasMultipleFiles ? 'lg:w-[calc(100%-16rem)]' : 'w-full'} ${hasMultipleFiles ? 'mt-[50px] lg:mt-0' : ''}`}>
 
           {/* Toolbar (Only for first file with images) */}
-          {isFirstFile && (
+          {isFirstFile && note.previewPages && note.previewPages.length > 0 && (
             <div className="bg-slate-900/50 backdrop-blur-sm border-b border-slate-800 px-4 py-2 flex items-center justify-center gap-4 shrink-0">
               {/* Page Navigation */}
               <div className="flex items-center gap-2">
@@ -243,7 +243,7 @@ export function NotesViewer({ note, onClose }: NotesViewerProps) {
 
           {/* Content */}
           <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-slate-950/50">
-            {isFirstFile ? (
+            {isFirstFile && note.previewPages && note.previewPages.length > 0 ? (
               // Image Viewer for First File
               <div
                 className="relative shadow-2xl transition-transform duration-200 ease-out origin-top"

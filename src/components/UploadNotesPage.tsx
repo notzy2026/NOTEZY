@@ -18,7 +18,7 @@ export function UploadNotesPage() {
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState<NoteCategory>('assignment');
   const [previewFiles, setPreviewFiles] = useState<File[]>([]);
-  const [pdfFiles, setPdfFiles] = useState<File[]>([]);
+  const [noteFiles, setNoteFiles] = useState<File[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [extracting, setExtracting] = useState(false);
@@ -110,8 +110,8 @@ export function UploadNotesPage() {
       return;
     }
 
-    if (pdfFiles.length === 0) {
-      setError('Please upload at least one PDF file');
+    if (noteFiles.length === 0) {
+      setError('Please upload at least one file');
       return;
     }
 
@@ -157,10 +157,10 @@ export function UploadNotesPage() {
           await addCourse(courseCode, courseName);
         }
 
-        // Upload PDF to Firebase Storage (temporary)
-        setUploadProgress('Uploading PDF to temporary storage...');
+        // Upload File to Firebase Storage (temporary)
+        setUploadProgress('Uploading file to temporary storage...');
         const pyqNoteId = `pyq_temp/${tempId}`;
-        await uploadNoteFile(pdfFiles[0], pyqNoteId);
+        await uploadNoteFile(noteFiles[0], pyqNoteId);
 
         // Call Cloud Function to transfer to Google Drive
         setUploadProgress('Transferring to Google Drive...');
@@ -171,7 +171,7 @@ export function UploadNotesPage() {
           storagePath: `notes/${pyqNoteId}/document.pdf`,
           courseCode,
           courseName,
-          fileName: pdfFiles[0].name,
+          fileName: noteFiles[0].name,
         });
 
         console.log('PYQ uploaded to Drive:', result.data);
@@ -181,7 +181,7 @@ export function UploadNotesPage() {
         setTimeout(() => {
           setSubmitted(false);
           setCategory('assignment');
-          setPdfFiles([]);
+          setNoteFiles([]);
           setSelectedCourseCode('');
           setSelectedCourseName('');
           setNewCourseCode('');
@@ -190,32 +190,38 @@ export function UploadNotesPage() {
         }, 3000);
       } else {
         // Regular note upload flow
-        // Compress all PDF files before uploading
-        setUploadProgress(`Compressing ${pdfFiles.length} PDF file(s)...`);
-        const compressedFiles: File[] = [];
+        // Compress only PDF files before uploading
+        setUploadProgress(`Processing ${noteFiles.length} file(s)...`);
+        const processedFiles: File[] = [];
         const compressionResultsList: CompressionResult[] = [];
 
-        for (let i = 0; i < pdfFiles.length; i++) {
-          setUploadProgress(`Compressing PDF ${i + 1} of ${pdfFiles.length}...`);
-          try {
-            const result = await compressPdf(pdfFiles[i]);
-            compressedFiles.push(result.compressedFile);
-            compressionResultsList.push(result);
-          } catch (compressError) {
-            console.error(`Error compressing PDF ${i + 1}:`, compressError);
-            // If compression fails, use original file
-            compressedFiles.push(pdfFiles[i]);
+        for (let i = 0; i < noteFiles.length; i++) {
+          const file = noteFiles[i];
+          if (file.type === 'application/pdf') {
+            setUploadProgress(`Compressing PDF ${i + 1} of ${noteFiles.length}...`);
+            try {
+              const result = await compressPdf(file);
+              processedFiles.push(result.compressedFile);
+              compressionResultsList.push(result);
+            } catch (compressError) {
+              console.error(`Error compressing PDF ${i + 1}:`, compressError);
+              // If compression fails, use original file
+              processedFiles.push(file);
+            }
+          } else {
+            // For non-PDF files, just push the original file
+            processedFiles.push(file);
           }
         }
         setCompressionResults(compressionResultsList);
 
-        // Upload all compressed PDF files to Firebase Storage
-        setUploadProgress(`Uploading ${compressedFiles.length} PDF file(s)...`);
-        const pdfUrls: string[] = [];
-        for (let i = 0; i < compressedFiles.length; i++) {
-          setUploadProgress(`Uploading PDF ${i + 1} of ${compressedFiles.length}...`);
-          const url = await uploadNoteFile(compressedFiles[i], `${tempId}_${i}`);
-          pdfUrls.push(url);
+        // Upload all files to Firebase Storage
+        setUploadProgress(`Uploading ${processedFiles.length} file(s)...`);
+        const fileUrls: string[] = [];
+        for (let i = 0; i < processedFiles.length; i++) {
+          setUploadProgress(`Uploading file ${i + 1} of ${processedFiles.length}...`);
+          const url = await uploadNoteFile(processedFiles[i], `${tempId}_${i}`);
+          fileUrls.push(url);
         }
 
         // Upload preview images to Firebase Storage
@@ -226,12 +232,14 @@ export function UploadNotesPage() {
           previewUrls.push(url);
         }
 
-        // Count total pages across all PDFs
+        // Count total pages across all PDFs (only for PDFs)
         setUploadProgress('Counting pages...');
         let totalPages = 0;
-        for (const pdfFile of pdfFiles) {
-          const pageCount = await getPdfPageCount(pdfFile);
-          totalPages += pageCount;
+        for (const file of noteFiles) {
+          if (file.type === 'application/pdf') {
+            const pageCount = await getPdfPageCount(file);
+            totalPages += pageCount;
+          }
         }
 
         // Create note document in Firestore
@@ -243,13 +251,13 @@ export function UploadNotesPage() {
           price: parseFloat(price),
           previewPages: previewUrls,
           thumbnailUrl: previewUrls[0] || '',
-          pdfUrls,
+          pdfUrls: fileUrls,
           totalPages,
           uploaderId: user.uid,
           uploaderName: userProfile.name,
         });
 
-        console.log('Note created with PDF URLs:', pdfUrls);
+        console.log('Note created with file URLs:', fileUrls);
 
         // If fulfilling a request, mark it as fulfilled
         if (fulfillingRequest && requestId) {
@@ -266,7 +274,7 @@ export function UploadNotesPage() {
           setPrice('');
           setCategory('assignment');
           setPreviewFiles([]);
-          setPdfFiles([]);
+          setNoteFiles([]);
           setCompressionResults([]);
           // Navigate back to requests page if fulfilling
           if (fulfillingRequest) {
@@ -289,47 +297,56 @@ export function UploadNotesPage() {
     }
   };
 
-  const handlePdfFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const files = Array.from(e.target.files);
 
-      // Validate that all files are PDFs
-      const nonPdfFiles = files.filter(file => file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf'));
-      if (nonPdfFiles.length > 0) {
-        setError('Only PDF files are supported. Please upload PDF files only.');
-        e.target.value = ''; // Clear the input
-        return;
-      }
-
-      setPdfFiles(files);
+      setNoteFiles(files);
       setPreviewFiles([]);
+      setError(''); // Clear previous errors
 
-      // Auto-extract previews from the first PDF
-      setExtracting(true);
-      setError('');
-      try {
-        // For assignments, only extract 1 preview page; for lecture-notes, extract 4 pages
-        const maxPreviewPages = category === 'assignment' ? 1 : 4;
-        const previews = await extractPdfPreviews(files[0], maxPreviewPages);
-        setPreviewFiles(previews);
-      } catch (err) {
-        console.error('Error extracting previews:', err);
-        setError('Could not extract previews. Please try a different PDF file.');
-      } finally {
-        setExtracting(false);
+      const firstFile = files[0];
+      const fileType = firstFile.type;
+      const fileName = firstFile.name.toLowerCase();
+
+      // Check for supported preview types
+      const isPdf = fileType === 'application/pdf' || fileName.endsWith('.pdf');
+      const isDoc = fileType.includes('word') || fileName.endsWith('.doc') || fileName.endsWith('.docx') ||
+        fileType.includes('presentation') || fileName.endsWith('.ppt') || fileName.endsWith('.pptx');
+
+      if (isPdf) {
+        // Auto-extract previews from the first PDF
+        setExtracting(true);
+        try {
+          // For assignments, only extract 1 preview page; for lecture-notes, extract 4 pages
+          const maxPreviewPages = category === 'assignment' ? 1 : 4;
+          const previews = await extractPdfPreviews(firstFile, maxPreviewPages);
+          setPreviewFiles(previews);
+        } catch (err) {
+          console.error('Error extracting previews:', err);
+          setError('Could not extract previews. Please try a different PDF file.');
+        } finally {
+          setExtracting(false);
+        }
+      } else if (isDoc) {
+        // Supported but no image preview generation
+        // Do nothing, just allow upload
+      } else {
+        // Not supported for preview
+        setError(`Preview of ${fileType || 'this file type'} is not supported.`);
       }
     }
   };
 
-  const getTotalPdfSize = () => {
-    const totalBytes = pdfFiles.reduce((sum, file) => sum + file.size, 0);
+  const getTotalFileSize = () => {
+    const totalBytes = noteFiles.reduce((sum, file) => sum + file.size, 0);
     return (totalBytes / 1024 / 1024).toFixed(2);
   };
 
-  // Remove a PDF file at the given index
-  const removePdfFile = async (indexToRemove: number) => {
-    const newFiles = pdfFiles.filter((_, index) => index !== indexToRemove);
-    setPdfFiles(newFiles);
+  // Remove a file at the given index
+  const removeFile = async (indexToRemove: number) => {
+    const newFiles = noteFiles.filter((_, index) => index !== indexToRemove);
+    setNoteFiles(newFiles);
 
     // If we removed the first file and there are still files, re-extract previews from the new first file
     if (indexToRemove === 0 && newFiles.length > 0 && category !== 'pyq') {
@@ -345,7 +362,7 @@ export function UploadNotesPage() {
         setExtracting(false);
       }
     } else if (newFiles.length === 0) {
-      setPreviewFiles([]);
+      setPreviewFiles([]); // Clear previews if no files left
     }
   };
 
@@ -365,11 +382,11 @@ export function UploadNotesPage() {
       return;
     }
 
-    const newFiles = [...pdfFiles];
+    const newFiles = [...noteFiles];
     const draggedFile = newFiles[draggedIndex];
     newFiles.splice(draggedIndex, 1);
     newFiles.splice(dropIndex, 0, draggedFile);
-    setPdfFiles(newFiles);
+    setNoteFiles(newFiles);
 
     // If the first file changed, re-extract previews
     const firstFileChanged = draggedIndex === 0 || dropIndex === 0;
@@ -594,34 +611,33 @@ export function UploadNotesPage() {
               </>
             )}
 
-            {/* PDF Files Upload */}
+            {/* Files Upload */}
             <div>
               <label className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-2">
                 <File className="w-4 h-4" />
-                <span>PDF Files *</span>
+                <span>Files *</span>
               </label>
               <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
-                Upload one or more PDF files (these are the files buyers will download)
+                Upload files (PDF, DOCX, PPT, etc.)
               </p>
               <input
                 type="file"
-                accept=".pdf,application/pdf"
                 multiple
-                onChange={handlePdfFileChange}
+                onChange={handleFileChange}
                 className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-purple-600 file:text-white hover:file:bg-purple-700 text-gray-900 dark:text-white"
               />
-              {pdfFiles.length > 0 && (
+              {noteFiles.length > 0 && (
                 <div className="mt-3 space-y-2">
                   <div className="text-sm text-green-600 dark:text-green-400">
-                    {pdfFiles.length} PDF file(s) selected ({getTotalPdfSize()} MB total)
+                    {noteFiles.length} file(s) selected ({getTotalFileSize()} MB total)
                   </div>
-                  {pdfFiles.length > 1 && (
+                  {noteFiles.length > 1 && (
                     <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
                       Drag files to reorder • First file is used for preview images
                     </p>
                   )}
                   <div className="space-y-2">
-                    {pdfFiles.map((file, index) => (
+                    {noteFiles.map((file, index) => (
                       <div
                         key={index}
                         draggable
@@ -651,7 +667,7 @@ export function UploadNotesPage() {
                         {/* Remove Button */}
                         <button
                           type="button"
-                          onClick={() => removePdfFile(index)}
+                          onClick={() => removeFile(index)}
                           className="p-1 rounded-full hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-500 transition-colors"
                           title="Remove file"
                         >
@@ -668,7 +684,7 @@ export function UploadNotesPage() {
                       </div>
                       {compressionResults.map((result, index) => (
                         <div key={index} className="text-xs text-blue-700 dark:text-blue-400 mb-1">
-                          {pdfFiles[index]?.name}: {formatFileSize(result.originalSize)} → {formatFileSize(result.compressedSize)}
+                          {noteFiles[index]?.name}: {formatFileSize(result.originalSize)} → {formatFileSize(result.compressedSize)}
                           <span className="ml-2 px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded">
                             {result.compressionRatio > 0 ? `${result.compressionRatio.toFixed(0)}% smaller` : 'No reduction'}
                           </span>
@@ -711,7 +727,7 @@ export function UploadNotesPage() {
                   </div>
                 ) : (
                   <p className="text-gray-500 dark:text-gray-400 text-sm">
-                    Upload a PDF above - {category === 'assignment' ? 'the first page will be' : 'the first 4 pages will be'} automatically extracted as preview{category === 'assignment' ? '' : 's'}
+                    Upload a PDF to see automatic previews. Other file types will show a generic preview.
                   </p>
                 )}
               </div>
@@ -742,8 +758,8 @@ export function UploadNotesPage() {
         <div className="mt-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-6">
           <h3 className="text-blue-900 dark:text-blue-200 mb-3">Upload Guidelines</h3>
           <ul className="space-y-2 text-blue-800 dark:text-blue-300 text-sm">
-            <li>• Only PDF files are supported</li>
-            <li>• Preview images are automatically extracted from your PDF (1 page for assignments, 4 pages for lecture notes)</li>
+            <li>• Supports PDF, DOCX, PPT, and more</li>
+            <li>• Preview images are automatically extracted only for PDF files</li>
             <li>• Ensure your notes are original or you have permission to sell them</li>
             <li>• Write an accurate description of what's included</li>
             <li>• Price your notes fairly based on content quality and length</li>

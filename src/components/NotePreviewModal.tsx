@@ -137,46 +137,62 @@ export function NotePreviewModal({ note, onClose, onPurchase, paymentLoading = f
         <div className="p-4 lg:p-6">
           {/* Preview Pages */}
           <div className="mb-6">
-            <h3 className="text-gray-900 dark:text-white mb-3">Preview Pages ({note.previewPages.length} pages)</h3>
-            <div className="relative bg-gray-100 dark:bg-gray-800 rounded-2xl overflow-hidden min-h-[300px] flex items-center justify-center">
-              {/* Loading spinner */}
-              {imageLoading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-800 z-10">
-                  <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-                </div>
-              )}
-              <img
-                src={note.previewPages[currentPage]}
-                alt={`Page ${currentPage + 1}`}
-                className={`w-full h-auto lg:w-auto lg:h-full lg:max-h-[70vh] lg:mx-auto object-contain transition-opacity duration-200 ${imageLoading ? 'opacity-0' : 'opacity-100'}`}
-                onLoad={() => setImageLoading(false)}
-                onLoadStart={() => !preloadedImages.has(currentPage) && setImageLoading(true)}
-              />
+            <h3 className="text-gray-900 dark:text-white mb-3">
+              Preview {note.previewPages.length > 0 ? `Pages (${note.previewPages.length} pages)` : ''}
+            </h3>
 
-              {note.previewPages.length > 1 && (
-                <>
-                  <button
-                    onClick={prevPage}
-                    disabled={currentPage === 0}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white dark:bg-gray-900 rounded-xl shadow-xl disabled:opacity-50 disabled:cursor-not-allowed hover:scale-110 transition-transform"
-                  >
-                    <ChevronLeft className="w-6 h-6 text-gray-700 dark:text-gray-300" />
-                  </button>
-
-                  <button
-                    onClick={nextPage}
-                    disabled={currentPage === note.previewPages.length - 1}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white dark:bg-gray-900 rounded-xl shadow-xl disabled:opacity-50 disabled:cursor-not-allowed hover:scale-110 transition-transform"
-                  >
-                    <ChevronRight className="w-6 h-6 text-gray-700 dark:text-gray-300" />
-                  </button>
-
-                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black bg-opacity-70 text-white px-4 py-2 rounded-xl text-sm backdrop-blur-sm">
-                    {currentPage + 1} / {note.previewPages.length}
+            {note.previewPages && note.previewPages.length > 0 ? (
+              <div className="relative bg-gray-100 dark:bg-gray-800 rounded-2xl overflow-hidden min-h-[300px] flex items-center justify-center">
+                {/* Loading spinner */}
+                {imageLoading && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-800 z-10">
+                    <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
                   </div>
-                </>
-              )}
-            </div>
+                )}
+                <img
+                  src={note.previewPages[currentPage]}
+                  alt={`Page ${currentPage + 1}`}
+                  className={`w-full h-auto lg:w-auto lg:h-full lg:max-h-[70vh] lg:mx-auto object-contain transition-opacity duration-200 ${imageLoading ? 'opacity-0' : 'opacity-100'}`}
+                  onLoad={() => setImageLoading(false)}
+                  onLoadStart={() => !preloadedImages.has(currentPage) && setImageLoading(true)}
+                />
+
+                {note.previewPages.length > 1 && (
+                  <>
+                    <button
+                      onClick={prevPage}
+                      disabled={currentPage === 0}
+                      className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white dark:bg-gray-900 rounded-xl shadow-xl disabled:opacity-50 disabled:cursor-not-allowed hover:scale-110 transition-transform"
+                    >
+                      <ChevronLeft className="w-6 h-6 text-gray-700 dark:text-gray-300" />
+                    </button>
+
+                    <button
+                      onClick={nextPage}
+                      disabled={currentPage === note.previewPages.length - 1}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white dark:bg-gray-900 rounded-xl shadow-xl disabled:opacity-50 disabled:cursor-not-allowed hover:scale-110 transition-transform"
+                    >
+                      <ChevronRight className="w-6 h-6 text-gray-700 dark:text-gray-300" />
+                    </button>
+
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black bg-opacity-70 text-white px-4 py-2 rounded-xl text-sm backdrop-blur-sm">
+                      {currentPage + 1} / {note.previewPages.length}
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="bg-gray-100 dark:bg-gray-800 rounded-2xl p-12 text-center border border-gray-200 dark:border-gray-700">
+                <div className="w-16 h-16 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <File className="w-8 h-8 text-gray-400 dark:text-gray-500" />
+                </div>
+                <h4 className="text-gray-900 dark:text-white font-medium mb-1">No Preview Available</h4>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">
+                  This file type does not support image previews.
+                  {hasPurchased ? ' Please download the file to view it.' : ' Purchase to download and view.'}
+                </p>
+              </div>
+            )}
 
             {/* Purchase Button - Visible if not purchased */}
             {!hasPurchased && onPurchase && (
