@@ -212,20 +212,19 @@ export function Navigation({ currentPage, onNavigate, onLoginRequest }: Navigati
                 <Moon className="w-5 h-5 text-gray-700 dark:text-slate-300" />
               )}
             </button>
+            {/* Announcements - show for all users including guests */}
+            <AnnouncementsDropdown />
             {/* Notifications - only show for logged in users */}
             {!isGuest && (
-              <>
-                <AnnouncementsDropdown />
-                <NotificationsDropdown onNavigate={onNavigate} />
-              </>
+              <NotificationsDropdown onNavigate={onNavigate} />
             )}
             {/* Login for Guests */}
             {isGuest && onLoginRequest && (
               <button
                 onClick={onLoginRequest}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-sm font-semibold transition-all text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-slate-800"
               >
-                <LogIn className="w-4 h-4" />
+                <LogIn className="w-4 h-4 flex-shrink-0" />
                 <span>Login</span>
               </button>
             )}
