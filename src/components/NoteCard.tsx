@@ -50,7 +50,11 @@ export function NoteCard({
             </span>
           )}
           {note.isVerified && (
-            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg shadow-lg" style={{ backgroundColor: '#16a34a', color: '#ffffff' }}>
+            <span
+              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg shadow-lg cursor-default"
+              style={{ backgroundColor: '#16a34a', color: '#ffffff' }}
+              title="This document has been checked by Notezy for accuracy, readability quality and to the point description"
+            >
               <ShieldCheck className="w-3 h-3" />
               Verified
             </span>
@@ -78,18 +82,24 @@ export function NoteCard({
 
       <div className="p-5">
         <div className="flex items-start justify-between gap-2 mb-3">
-          <h3 className="text-gray-900 dark:text-white line-clamp-2 flex-1">{note.title}</h3>
+          <h3 className="text-gray-900 dark:text-white truncate flex-1" title={note.title}>{note.title}</h3>
           <span className="bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 bg-clip-text text-transparent whitespace-nowrap">₹{note.price}</span>
         </div>
 
         <p className="text-gray-600 dark:text-slate-400 text-sm line-clamp-2 mb-4">{note.description}</p>
 
         <div className="flex items-center gap-3 mb-4 text-sm">
-          <div className="flex items-center gap-1">
-            <Star className="w-4 h-4 fill-yellow-500 text-yellow-500" />
-            <span className="text-gray-900 dark:text-white">{note.rating}</span>
-          </div>
-          <span className="text-gray-500 dark:text-slate-400">({note.reviewCount})</span>
+          {note.reviewCount > 0 ? (
+            <>
+              <div className="flex items-center gap-1">
+                <Star className="w-4 h-4 fill-yellow-500 text-yellow-500" />
+                <span className="text-gray-900 dark:text-white">{note.rating}</span>
+              </div>
+              <span className="text-gray-500 dark:text-slate-400">({note.reviewCount})</span>
+            </>
+          ) : (
+            <span className="text-gray-400 dark:text-slate-500 italic text-xs">No reviews yet</span>
+          )}
           <span className="text-gray-400 dark:text-slate-600">•</span>
           <span className="text-gray-600 dark:text-slate-400">{note.salesCount} sales</span>
         </div>

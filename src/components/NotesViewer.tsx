@@ -30,17 +30,20 @@ export function NotesViewer({ note, onClose }: NotesViewerProps) {
   const hasMultipleFiles = (note.pdfUrls?.length ?? 0) > 1;
   const currentFileUrl = note.pdfUrls?.[selectedFileIndex] || '';
 
-  // Pagination logic only applies to the first file which has preview images
-  const totalPages = isFirstFile && note.previewPages && note.previewPages.length > 0 ? note.previewPages.length : 1;
+  // Use the full PDF url if available; preview images are only a fallback
+  const hasPdfUrl = !!currentFileUrl;
+  // Pagination only applies when falling back to preview images (no pdfUrl)
+  const usePreviewImages = !hasPdfUrl && isFirstFile && note.previewPages && note.previewPages.length > 0;
+  const totalPages = usePreviewImages ? note.previewPages!.length : 1;
 
   const handlePrevPage = () => {
-    if (isFirstFile) {
+    if (usePreviewImages) {
       setCurrentPage(prev => Math.max(1, prev - 1));
     }
   };
 
   const handleNextPage = () => {
-    if (isFirstFile) {
+    if (usePreviewImages) {
       setCurrentPage(prev => Math.min(totalPages, prev + 1));
     }
   };
@@ -151,7 +154,7 @@ export function NotesViewer({ note, onClose }: NotesViewerProps) {
                       File {index + 1}
                     </p>
                     <p className="text-xs opacity-70 truncate">
-                      {index === 0 ? 'Preview available' : 'PDF Viewer'}
+                      PDF Viewer
                     </p>
                   </div>
                 </button>
@@ -181,8 +184,8 @@ export function NotesViewer({ note, onClose }: NotesViewerProps) {
         {/* Viewer Area */}
         <div className={`flex-1 flex flex-col relative bg-slate-950 ${hasMultipleFiles ? 'lg:w-[calc(100%-16rem)]' : 'w-full'} ${hasMultipleFiles ? 'mt-[50px] lg:mt-0' : ''}`}>
 
-          {/* Toolbar (Only for first file with images) */}
-          {isFirstFile && note.previewPages && note.previewPages.length > 0 && (
+          {/* Toolbar — only shown when falling back to preview images (no PDF url) */}
+          {usePreviewImages && (
             <div className="bg-slate-900/50 backdrop-blur-sm border-b border-slate-800 px-4 py-2 flex items-center justify-center gap-4 shrink-0">
               {/* Page Navigation */}
               <div className="flex items-center gap-2">
@@ -243,8 +246,8 @@ export function NotesViewer({ note, onClose }: NotesViewerProps) {
 
           {/* Content */}
           <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-slate-950/50">
-            {isFirstFile && note.previewPages && note.previewPages.length > 0 ? (
-              // Image Viewer for First File
+            {usePreviewImages ? (
+              // Fallback: show preview images if no PDF url is available
               <div
                 className="relative shadow-2xl transition-transform duration-200 ease-out origin-top"
                 style={{
@@ -253,14 +256,14 @@ export function NotesViewer({ note, onClose }: NotesViewerProps) {
                 }}
               >
                 <img
-                  src={note.previewPages[currentPage - 1]}
+                  src={note.previewPages![currentPage - 1]}
                   alt={`Page ${currentPage}`}
                   className="max-w-full h-auto rounded-lg bg-white"
                   style={{ maxHeight: '80vh' }}
                 />
               </div>
             ) : (
-              // PDF Viewer for Other Files
+              // Full PDF Viewer — used for all files including File 1 when pdfUrl exists
               <div className="w-full h-full flex flex-col items-center justify-center max-w-5xl mx-auto bg-slate-900 rounded-xl border border-slate-800 overflow-hidden relative">
                 {loadingPdf && (
                   <div className="absolute inset-0 flex items-center justify-center bg-slate-900 z-10">

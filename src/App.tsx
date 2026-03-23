@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Routes, Route, useNavigate } from 'react-router-dom';
+import { Routes, Route, useNavigate, useSearchParams } from 'react-router-dom';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Navigation } from './components/Navigation';
@@ -35,6 +35,9 @@ import { NoteDeepLink } from './components/NoteDeepLink';
 
 import { LoginPromptModal } from './components/LoginPromptModal';
 import { OnboardingModal } from './components/OnboardingModal';
+import { GuestUploadPage } from './components/GuestUploadPage';
+import { GuestLockedPage } from './components/GuestLockedPage';
+import { Download, Bookmark, FileQuestion, IndianRupee, User, MessageSquare, Settings as SettingsIcon } from 'lucide-react';
 import {
   PublicTermsPage,
 
@@ -62,9 +65,11 @@ function AppContent() {
   const { initiatePayment, loading: paymentLoading } = useRazorpay();
   const navigate = useNavigate();
 
+  const [searchParams, setSearchParams] = useSearchParams();
   const [authPage, setAuthPage] = useState<'landing' | 'login' | 'signup'>('landing');
   const [currentPage, setCurrentPage] = useState('home');
   const [searchQuery, setSearchQuery] = useState('');
+  const [openPYQOnLoad, setOpenPYQOnLoad] = useState(() => searchParams.has('pyq'));
   const [previewNote, setPreviewNote] = useState<Note | null>(null);
   const [viewerNote, setViewerNote] = useState<Note | null>(null);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
@@ -100,6 +105,18 @@ function AppContent() {
       setCurrentPage('admin');
     }
   }, [userProfile?.isAdmin]);
+
+  // Handle ?pyq= deep link: open home page in PYQ section
+  useEffect(() => {
+    if (searchParams.has('pyq')) {
+      setCurrentPage('home');
+      setOpenPYQOnLoad(true);
+      // Clean the param from the URL without reloading
+      const next = new URLSearchParams(searchParams);
+      next.delete('pyq');
+      setSearchParams(next, { replace: true });
+    }
+  }, []);
 
   // Handle redirect back to note page after login
   useEffect(() => {
@@ -254,7 +271,8 @@ function AppContent() {
             setPurchasedNotes([...purchasedNotes, note]);
           }
           setPurchasedIds([...purchasedIds, noteId]);
-          alert(`Successfully purchased "${note.title}"!`);
+          // Redirect user to Downloads section
+          setCurrentPage('downloads');
         } else if (result.error && result.error !== 'Payment cancelled') {
           alert(`Payment failed: ${result.error}`);
         }
@@ -370,6 +388,7 @@ function AppContent() {
           onSearchChange={setSearchQuery}
           showSearch={showSearch}
           onNavigate={setCurrentPage}
+          onLoginRequest={handleGuestLoginRedirect}
         />
       </div>
 
@@ -390,55 +409,129 @@ function AppContent() {
           purchasingNoteId={purchasingNoteId}
           isGuest={isGuest}
           onKnowMore={handleKnowMore}
+          openPYQOnLoad={openPYQOnLoad}
         />
 
       )}
 
       {currentPage === 'downloads' && (
-        <DownloadsPage
-          purchasedNotes={purchasedNotes}
-          onPreview={setPreviewNote}
-          onViewNotes={handleViewNotes}
-        />
+        isGuest ? (
+          <GuestLockedPage
+            icon={Download}
+            title="Your downloads will appear here"
+            subtitle="Purchase notes and access them anytime, even offline."
+            ctaLabel="Sign in to see your downloads"
+            cards={[
+              { icon: Download, iconBg: 'bg-blue-50 dark:bg-blue-900/30', iconColor: 'text-blue-600 dark:text-blue-400', borderColor: '#60a5fa', title: 'Instant Access', description: 'Get PDF access immediately after purchase.' },
+              { icon: Bookmark, iconBg: 'bg-purple-50 dark:bg-purple-900/30', iconColor: 'text-purple-600 dark:text-purple-400', borderColor: '#c084fc', title: 'Save & Revisit', description: 'All your bought materials in one place, always.' },
+            ]}
+            onLoginRequest={handleGuestLoginRedirect}
+          />
+        ) : (
+          <DownloadsPage
+            purchasedNotes={purchasedNotes}
+            onPreview={setPreviewNote}
+            onViewNotes={handleViewNotes}
+          />
+        )
       )}
 
       {currentPage === 'bookmarks' && (
-        <BookmarksPage
-          bookmarkedNotes={bookmarkedNotes}
-          onPreview={setPreviewNote}
-          onBookmark={handleBookmark}
-          onPurchase={handlePurchase}
-          onViewNotes={handleViewNotes}
-          purchasedIds={purchasedIds}
-          paymentLoading={paymentLoading}
-          purchasingNoteId={purchasingNoteId}
-        />
+        isGuest ? (
+          <GuestLockedPage
+            icon={Bookmark}
+            title="Bookmark notes to revisit later"
+            subtitle="Save any note with one tap and come back to it whenever you want."
+            ctaLabel="Sign in to see your bookmarks"
+            cards={[
+              { icon: Bookmark, iconBg: 'bg-pink-50 dark:bg-pink-900/30', iconColor: 'text-pink-600 dark:text-pink-400', borderColor: '#f472b6', title: 'Save Instantly', description: 'Bookmark any note in one tap while browsing.' },
+              { icon: FileQuestion, iconBg: 'bg-amber-50 dark:bg-amber-900/30', iconColor: 'text-amber-600 dark:text-amber-400', borderColor: '#fbbf24', title: 'Never Lose Track', description: 'All your saved notes organised in one list.' },
+            ]}
+            onLoginRequest={handleGuestLoginRedirect}
+          />
+        ) : (
+          <BookmarksPage
+            bookmarkedNotes={bookmarkedNotes}
+            onPreview={setPreviewNote}
+            onBookmark={handleBookmark}
+            onPurchase={handlePurchase}
+            onViewNotes={handleViewNotes}
+            purchasedIds={purchasedIds}
+            paymentLoading={paymentLoading}
+            purchasingNoteId={purchasingNoteId}
+          />
+        )
       )}
 
       {currentPage === 'earnings' && (
-        <EarningsPage
-          totalEarnings={currentUserProfile.totalEarnings}
-          uploadedNotes={currentUserProfile.uploadedNotes}
-        />
+        isGuest ? (
+          <GuestLockedPage
+            icon={IndianRupee}
+            title="Track your earnings here"
+            subtitle="Upload your notes and watch your money grow with every sale."
+            ctaLabel="Sign in to view earnings"
+            cards={[
+              { icon: IndianRupee, iconBg: 'bg-emerald-50 dark:bg-emerald-900/30', iconColor: 'text-emerald-600 dark:text-emerald-400', borderColor: '#34d399', title: '70% Revenue Share', description: 'You keep 70% of every sale. 30% goes to the platform.' },
+              { icon: Download, iconBg: 'bg-blue-50 dark:bg-blue-900/30', iconColor: 'text-blue-600 dark:text-blue-400', borderColor: '#60a5fa', title: 'Weekly Payouts', description: 'Earnings sent directly to your account every week.' },
+            ]}
+            onLoginRequest={handleGuestLoginRedirect}
+          />
+        ) : (
+          <EarningsPage
+            totalEarnings={currentUserProfile.totalEarnings}
+            uploadedNotes={currentUserProfile.uploadedNotes}
+          />
+        )
       )}
 
       {currentPage === 'profile' && (
-        <ProfilePage
-          user={currentUserProfile}
-          onPreview={setPreviewNote}
-        />
+        isGuest ? (
+          <GuestLockedPage
+            icon={User}
+            title="Your profile lives here"
+            subtitle="See your uploaded notes, earnings history, and manage your account."
+            ctaLabel="Sign in to view profile"
+            cards={[
+              { icon: User, iconBg: 'bg-violet-50 dark:bg-violet-900/30', iconColor: 'text-violet-600 dark:text-violet-400', borderColor: '#a78bfa', title: 'Personal Dashboard', description: 'Track your notes, sales, and account details.' },
+              { icon: SettingsIcon, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-600 dark:text-slate-400', borderColor: '#94a3b8', title: 'Full Control', description: 'Update your name, avatar, and payment info anytime.' },
+            ]}
+            onLoginRequest={handleGuestLoginRedirect}
+          />
+        ) : (
+          <ProfilePage
+            user={currentUserProfile}
+            onPreview={setPreviewNote}
+          />
+        )
       )}
 
-      {currentPage === 'upload' && <UploadNotesPage />}
+      {currentPage === 'upload' && (
+        isGuest ? (
+          <GuestUploadPage onLoginRequest={handleGuestLoginRedirect} />
+        ) : (
+          <UploadNotesPage />
+        )
+      )}
 
       {currentPage === 'settings' && (
-        <SettingsPage
-          onNavigateToTerms={() => setCurrentPage('terms')}
-          onNavigateToAbout={() => setCurrentPage('about')}
-          onNavigateToPrivacy={() => setCurrentPage('privacy')}
-          onNavigateToRefund={() => setCurrentPage('refund')}
-          onNavigateToShipping={() => setCurrentPage('shipping')}
-        />
+        isGuest ? (
+          <GuestLockedPage
+            icon={SettingsIcon}
+            title="Settings & preferences"
+            subtitle="Sign in to manage your account, notifications, and privacy settings."
+            ctaLabel="Sign in to access settings"
+            cards={[]}
+            onLoginRequest={handleGuestLoginRedirect}
+          />
+        ) : (
+          <SettingsPage
+            onNavigateToTerms={() => setCurrentPage('terms')}
+            onNavigateToAbout={() => setCurrentPage('about')}
+            onNavigateToPrivacy={() => setCurrentPage('privacy')}
+            onNavigateToRefund={() => setCurrentPage('refund')}
+            onNavigateToShipping={() => setCurrentPage('shipping')}
+          />
+        )
       )}
 
       {currentPage === 'terms' && (
@@ -461,7 +554,23 @@ function AppContent() {
         <ShippingPage onBack={() => setCurrentPage('settings')} />
       )}
 
-      {currentPage === 'support' && <CustomerSupportPage onBack={() => setCurrentPage('home')} />}
+      {currentPage === 'support' && (
+        isGuest ? (
+          <GuestLockedPage
+            icon={MessageSquare}
+            title="We're here to help"
+            subtitle="Create an account to chat with our support team or report any issue."
+            ctaLabel="Sign in to contact support"
+            cards={[
+              { icon: MessageSquare, iconBg: 'bg-blue-50 dark:bg-blue-900/30', iconColor: 'text-blue-600 dark:text-blue-400', borderColor: '#60a5fa', title: 'Live Chat', description: 'Get help from our support team in real time.' },
+              { icon: User, iconBg: 'bg-violet-50 dark:bg-violet-900/30', iconColor: 'text-violet-600 dark:text-violet-400', borderColor: '#a78bfa', title: 'Account Help', description: 'Resolve payment issues, disputes, and more.' },
+            ]}
+            onLoginRequest={handleGuestLoginRedirect}
+          />
+        ) : (
+          <CustomerSupportPage onBack={() => setCurrentPage('home')} />
+        )
+      )}
 
       {currentPage === 'admin' && (
         <AdminDashboard onNavigate={setCurrentPage} />
@@ -496,7 +605,21 @@ function AppContent() {
       )}
 
       {currentPage === 'my-requests' && (
-        <MyRequestsPage />
+        isGuest ? (
+          <GuestLockedPage
+            icon={FileQuestion}
+            title="Request the notes you need"
+            subtitle="Can't find what you're looking for? Request it and sellers will upload it for you."
+            ctaLabel="Sign in to make a request"
+            cards={[
+              { icon: FileQuestion, iconBg: 'bg-amber-50 dark:bg-amber-900/30', iconColor: 'text-amber-600 dark:text-amber-400', borderColor: '#fbbf24', title: 'Ask for Anything', description: 'Request notes for any subject, chapter, or exam.' },
+              { icon: MessageSquare, iconBg: 'bg-blue-50 dark:bg-blue-900/30', iconColor: 'text-blue-600 dark:text-blue-400', borderColor: '#60a5fa', title: 'Sellers Respond', description: 'Active sellers get notified and upload what you need.' },
+            ]}
+            onLoginRequest={handleGuestLoginRedirect}
+          />
+        ) : (
+          <MyRequestsPage />
+        )
       )}
 
       {previewNote && (
@@ -530,6 +653,7 @@ function AppContent() {
         isOpen={showOnboarding}
         onClose={handleCloseOnboarding}
         isGuest={isGuest}
+        onSignupRequest={handleGuestSignupRedirect}
       />
     </div>
   );

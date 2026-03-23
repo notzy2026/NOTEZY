@@ -1,4 +1,4 @@
-import { Home, Download, Bookmark, IndianRupee, User, Upload, Menu, X, Moon, Sun, Settings, MessageSquare, Shield, Users, FileText, LogOut, Wallet, FileQuestion, LogIn, BookOpen, Megaphone } from 'lucide-react';
+import { Home, Download, Bookmark, IndianRupee, User, Upload, Menu, X, Moon, Sun, Settings, MessageSquare, Shield, Users, FileText, LogOut, Wallet, FileQuestion, LogIn, BookOpen, Megaphone, Lock } from 'lucide-react';
 import { useState } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -23,7 +23,7 @@ export function Navigation({ currentPage, onNavigate, onLoginRequest }: Navigati
   // Protected items that guests cannot access
   const protectedIds = ['downloads', 'bookmarks', 'my-requests', 'earnings', 'profile', 'upload', 'support', 'settings'];
 
-  // Regular user menu items
+  // Regular user menu items — always show all, mark protected ones as locked for guests
   const allUserMenuItems = [
     { id: 'home', label: 'Home', icon: Home },
     { id: 'downloads', label: 'Downloads', icon: Download },
@@ -36,21 +36,22 @@ export function Navigation({ currentPage, onNavigate, onLoginRequest }: Navigati
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
-  // Filter out protected items for guests
-  const userMenuItems = isGuest
-    ? allUserMenuItems.filter(item => !protectedIds.includes(item.id))
-    : allUserMenuItems;
+  // For guests: show all items but add a locked flag; for logged-in: all unlocked
+  const userMenuItems = allUserMenuItems.map(item => ({
+    ...item,
+    locked: isGuest && protectedIds.includes(item.id),
+  }));
 
   // Admin-only menu items
   const adminMenuItems = [
-    { id: 'admin', label: 'Dashboard', icon: Shield },
-    { id: 'admin-users', label: 'Manage Users', icon: Users },
-    { id: 'admin-pyqs', label: 'Free PYQs', icon: BookOpen },
-    { id: 'admin-payouts', label: 'Payouts', icon: Wallet },
-    { id: 'admin-requests', label: 'Note Requests', icon: FileQuestion },
-    { id: 'admin-earnings', label: 'User Earnings', icon: IndianRupee },
-    { id: 'admin-notes', label: 'Manage Notes', icon: FileText },
-    { id: 'admin-chats', label: 'Support Chats', icon: MessageSquare },
+    { id: 'admin', label: 'Dashboard', icon: Shield, locked: false },
+    { id: 'admin-users', label: 'Manage Users', icon: Users, locked: false },
+    { id: 'admin-pyqs', label: 'Free PYQs', icon: BookOpen, locked: false },
+    { id: 'admin-payouts', label: 'Payouts', icon: Wallet, locked: false },
+    { id: 'admin-requests', label: 'Note Requests', icon: FileQuestion, locked: false },
+    { id: 'admin-earnings', label: 'User Earnings', icon: IndianRupee, locked: false },
+    { id: 'admin-notes', label: 'Manage Notes', icon: FileText, locked: false },
+    { id: 'admin-chats', label: 'Support Chats', icon: MessageSquare, locked: false },
   ];
 
   // Which menu items to show based on user type (guests can't be admin)
@@ -59,21 +60,25 @@ export function Navigation({ currentPage, onNavigate, onLoginRequest }: Navigati
   // Mobile bottom navbar items - different for admin and guests
   const mobileBottomItems = (isAdmin && !isGuest)
     ? [
-      { id: 'admin', label: 'Dashboard', icon: Shield },
-      { id: 'admin-users', label: 'Users', icon: Users },
-      { id: 'admin-notes', label: 'Notes', icon: FileText },
-      { id: 'admin-chats', label: 'Chats', icon: MessageSquare },
+      { id: 'admin', label: 'Dashboard', icon: Shield, locked: false },
+      { id: 'admin-users', label: 'Users', icon: Users, locked: false },
+      { id: 'admin-notes', label: 'Notes', icon: FileText, locked: false },
+      { id: 'admin-chats', label: 'Chats', icon: MessageSquare, locked: false },
     ]
     : isGuest
       ? [
-        { id: 'home', label: 'Home', icon: Home },
+        { id: 'home', label: 'Home', icon: Home, locked: false },
+        { id: 'downloads', label: 'Downloads', icon: Download, locked: true },
+        { id: 'upload', label: 'Upload', icon: Upload, locked: true },
+        { id: 'earnings', label: 'Earnings', icon: IndianRupee, locked: true },
+        { id: 'profile', label: 'Profile', icon: User, locked: true },
       ]
       : [
-        { id: 'home', label: 'Home', icon: Home },
-        { id: 'downloads', label: 'Downloads', icon: Download },
-        { id: 'upload', label: 'Upload', icon: Upload },
-        { id: 'earnings', label: 'Earnings', icon: IndianRupee },
-        { id: 'profile', label: 'Profile', icon: User },
+        { id: 'home', label: 'Home', icon: Home, locked: false },
+        { id: 'downloads', label: 'Downloads', icon: Download, locked: false },
+        { id: 'upload', label: 'Upload', icon: Upload, locked: false },
+        { id: 'earnings', label: 'Earnings', icon: IndianRupee, locked: false },
+        { id: 'profile', label: 'Profile', icon: User, locked: false },
       ];
 
   // Mobile hamburger menu items (not in bottom navbar)
@@ -119,20 +124,26 @@ export function Navigation({ currentPage, onNavigate, onLoginRequest }: Navigati
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentPage === item.id;
-            const isUpload = item.id === 'upload';
+            const isLocked = 'locked' in item && item.locked;
 
             return (
               <button
                 key={item.id}
                 onClick={() => onNavigate(item.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${isActive
-                  ? 'text-white shadow-lg scale-[1.02]'
-                  : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800'
-                  }`}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                  isActive
+                    ? 'text-white shadow-lg scale-[1.02]'
+                    : isLocked
+                      ? 'text-gray-400 dark:text-slate-600 hover:bg-gray-50 dark:hover:bg-slate-800/50'
+                      : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800'
+                }`}
                 style={isActive ? { backgroundColor: isAdmin ? '#db2777' : '#2563eb' } : {}}
               >
-                <Icon className="w-5 h-5" />
-                <span>{item.label}</span>
+                <Icon className="w-5 h-5 flex-shrink-0" />
+                <span className="flex-1 text-left">{item.label}</span>
+                {isLocked && (
+                  <Lock className="w-3.5 h-3.5 flex-shrink-0 text-gray-400 dark:text-slate-600" />
+                )}
               </button>
             );
           })}
@@ -291,19 +302,27 @@ export function Navigation({ currentPage, onNavigate, onLoginRequest }: Navigati
           {mobileBottomItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentPage === item.id;
+            const isLocked = 'locked' in item && item.locked;
 
             return (
               <button
                 key={item.id}
                 onClick={() => onNavigate(item.id)}
-                className={`flex flex-col items-center justify-center flex-1 h-full transition-colors ${isActive
+                className={`relative flex flex-col items-center justify-center flex-1 h-full transition-colors ${isActive
                   ? isAdmin
                     ? 'text-purple-600 dark:text-purple-400'
                     : 'text-blue-600 dark:text-blue-400'
-                  : 'text-gray-500 dark:text-slate-400'
+                  : isLocked
+                    ? 'text-gray-400 dark:text-slate-600'
+                    : 'text-gray-500 dark:text-slate-400'
                   }`}
               >
-                <Icon className="w-5 h-5" />
+                <div className="relative">
+                  <Icon className="w-5 h-5" />
+                  {isLocked && (
+                    <Lock className="absolute -top-1.5 -right-2 w-3 h-3 text-gray-400 dark:text-slate-500" />
+                  )}
+                </div>
                 <span className="text-[10px] mt-1">{item.label}</span>
               </button>
             );
