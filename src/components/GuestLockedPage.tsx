@@ -27,10 +27,10 @@ export function GuestLockedPage({
   onLoginRequest,
 }: GuestLockedPageProps) {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] pb-32 p-6 lg:ml-64 animate-in fade-in duration-500">
+    <div className="flex flex-col items-center py-12 px-6 pb-28 lg:justify-center lg:min-h-[calc(100vh-4rem)] lg:pb-12 lg:ml-64 animate-in fade-in duration-500">
       {/* Icon — clean solid container */}
-      <div className="w-24 h-24 bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-3xl flex items-center justify-center mb-8 shadow-xl dark:shadow-blue-900/20">
-        <PageIcon className="w-12 h-12 text-blue-600 dark:text-blue-400" />
+      <div className="w-20 h-20 lg:w-24 lg:h-24 bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-3xl flex items-center justify-center mb-6 lg:mb-8 shadow-xl dark:shadow-blue-900/20">
+        <PageIcon className="w-10 h-10 lg:w-12 lg:h-12 text-blue-600 dark:text-blue-400" />
       </div>
 
       {/* Heading */}
